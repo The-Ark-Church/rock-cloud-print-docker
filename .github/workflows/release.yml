@@ -43,14 +43,20 @@ jobs:
       # Turns the git tag v1.1.0 into docker tags 1.1.0, 1.1 and latest.
       # Publishing them from one build is what keeps latest and the numbered
       # tag identical - the thing that had drifted apart before this existed.
+      #
+      # latest=auto is what makes a release-candidate tag safe: for a
+      # pre-release like v1.1.0-rc1 it publishes 1.1.0-rc1 only, and leaves
+      # both :latest and the :1.1 series pointing at the last real release.
+      # A hardcoded latest tag would overwrite production on every rc.
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: asdfinit/rock-cloudprint
+          flavor: |
+            latest=auto
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
 
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
