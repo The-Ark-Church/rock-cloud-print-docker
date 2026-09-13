@@ -14,6 +14,7 @@
 // limitations under the License.
 // </copyright>
 //
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.RateLimiting;
@@ -37,6 +38,7 @@ public class Program
 
         builder.Services.Configure<CloudPrintOptions>( builder.Configuration );
         builder.Services.AddSingleton<ProxyStatus>();
+        builder.Services.AddSingleton<PrintMetrics>();
         builder.Services.AddSingleton<AuthService>();
         builder.Services.AddHostedService<ProxyWorker>();
 
@@ -63,6 +65,8 @@ public class Program
         // operators can bind-mount an entire directory (e.g. a TrueNAS dataset
         // or a host folder) rather than a single file.
         builder.Configuration.AddJsonFile( "config/appsettings.json", optional: true, reloadOnChange: true );
+
+        var serviceVersion = GetServiceVersion();
 
         var app = builder.Build();
 
@@ -159,15 +163,41 @@ public class Program
 
         // ── Protected endpoints ──────────────────────────────────────────
 
-        app.MapGet( "/api/status", ( ProxyStatus status, IOptionsMonitor<CloudPrintOptions> options ) =>
+        // Describes a print attempt for the dashboard, or null when there has
+        // not been one of that kind yet.
+        static object? DescribePrintEvent( PrintEvent? printEvent )
+        {
+            if ( printEvent == null )
+            {
+                return null;
+            }
+
+            return new
+            {
+                address = printEvent.Address,
+                reason = printEvent.Reason,
+                elapsedMilliseconds = printEvent.ElapsedMilliseconds,
+                at = printEvent.Timestamp,
+                exceededRockTimeout = printEvent.ExceededRockTimeout,
+                succeeded = printEvent.Succeeded
+            };
+        }
+
+        app.MapGet( "/api/status", ( ProxyStatus status, PrintMetrics metrics, IOptionsMonitor<CloudPrintOptions> options ) =>
             Results.Ok( new
             {
+                version = serviceVersion,
                 isConnected = status.IsConnected,
                 isConfigured = !string.IsNullOrWhiteSpace( options.CurrentValue.Url )
                     && !string.IsNullOrWhiteSpace( options.CurrentValue.Id ),
                 startedDateTime = status.StartedDateTime,
                 connectedDateTime = status.ConnectedDateTime,
-                totalLabelsPrinted = status.TotalPrinted
+                totalLabelsPrinted = status.TotalPrinted,
+                labelsPrinted = metrics.SuccessfulLabels,
+                labelsFailed = metrics.FailedLabels,
+                slowPrints = metrics.SlowPrints,
+                lastFailure = DescribePrintEvent( metrics.LastFailure ),
+                lastSlowPrint = DescribePrintEvent( metrics.LastSlowPrint )
             } ) );
 
         app.MapGet( "/api/settings", ( IConfiguration config ) =>
@@ -259,11 +289,13 @@ public class Program
             return Results.Ok( new { success = true } );
         } );
 
-        // Returns the tail of the in-memory log buffer. The UI polls this every few
-        // seconds, so it defaults to a small window; pass ?limit=2000 to pull the
-        // full buffer when investigating something.
-        app.MapGet( "/api/logs", ( InMemoryLogSink sink, int? limit ) =>
-            Results.Ok( sink.GetEntries( limit ?? 300 ) ) );
+        // Returns the tail of the in-memory log buffer. Pass ?after= with the
+        // lastSeq from the previous call to fetch only what is new - this is how
+        // the UI keeps its log pane live without re-reading the whole buffer.
+        // Omit it to start fresh, and pass ?limit=2000 to pull the full buffer
+        // when investigating something.
+        app.MapGet( "/api/logs", ( InMemoryLogSink sink, long? after, int? limit ) =>
+            Results.Ok( sink.GetTail( after ?? 0, limit ?? 300 ) ) );
 
         app.MapPost( "/api/restart", ( IHostApplicationLifetime lifetime ) =>
         {
@@ -278,6 +310,30 @@ public class Program
         } );
 
         app.Run();
+    }
+
+    /// <summary>
+    /// The version this build was published with. Supplied by the Docker build
+    /// from the git tag, so what the UI reports and what the image is tagged
+    /// with cannot drift apart. Local builds report the csproj default.
+    /// </summary>
+    private static string GetServiceVersion()
+    {
+        var informationalVersion = typeof( Program ).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+
+        if ( string.IsNullOrWhiteSpace( informationalVersion ) )
+        {
+            return "unknown";
+        }
+
+        // The SDK appends "+<commit sha>" when source revision info is present.
+        var metadataIndex = informationalVersion.IndexOf( '+' );
+
+        return metadataIndex >= 0
+            ? informationalVersion[..metadataIndex]
+            : informationalVersion;
     }
 }
 

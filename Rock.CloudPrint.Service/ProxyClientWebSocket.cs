@@ -14,6 +14,7 @@
 // limitations under the License.
 // </copyright>
 //
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -39,16 +40,30 @@ class ProxyClientWebSocket : ProxyWebSocket
     private readonly ProxyStatus _status;
 
     /// <summary>
+    /// Records the outcome of each print attempt for the web UI.
+    /// </summary>
+    private readonly PrintMetrics _metrics;
+
+    /// <summary>
+    /// How long an attempt may take before Rock is assumed to have given up.
+    /// </summary>
+    private readonly int _slowPrintMilliseconds;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProxyClientWebSocket"/> class.
     /// </summary>
     /// <param name="socket">The <see cref="WebSocket"/> used for communication.</param>
     /// <param name="logger">The instance used for logging.</param>
     /// <param name="status">The shared proxy status instance.</param>
-    public ProxyClientWebSocket( WebSocket socket, ILogger logger, ProxyStatus status )
+    /// <param name="metrics">Records the outcome of each print attempt.</param>
+    /// <param name="slowPrintMilliseconds">The point past which Rock is assumed to have stopped waiting.</param>
+    public ProxyClientWebSocket( WebSocket socket, ILogger logger, ProxyStatus status, PrintMetrics metrics, int slowPrintMilliseconds )
         : base( socket )
     {
         _logger = logger;
         _status = status;
+        _metrics = metrics;
+        _slowPrintMilliseconds = slowPrintMilliseconds;
     }
 
     /// <inheritdoc/>
@@ -66,11 +81,55 @@ class ProxyClientWebSocket : ProxyWebSocket
         }
         else if ( message is CloudPrintMessagePrint printMessage )
         {
-            _status.AddLabels( printMessage.Count > 0 ? printMessage.Count : 1 );
+            var labelCount = printMessage.Count > 0 ? printMessage.Count : 1;
 
+            _status.AddLabels( labelCount );
+
+            var startedAt = Stopwatch.GetTimestamp();
             var printResult = await SendPrintDataAsync( printMessage.Address, extraData, cancellationToken );
+            var elapsed = Stopwatch.GetElapsedTime( startedAt );
 
+            // Respond first so our own bookkeeping never delays the server.
             await PostResponseAsync( message, printResult, cancellationToken );
+
+            RecordPrintResult( printMessage.Address, labelCount, printResult, elapsed );
+        }
+    }
+
+    /// <summary>
+    /// Records the outcome of a print attempt and logs anything the operator
+    /// would not otherwise learn from the existing success and failure lines.
+    /// </summary>
+    /// <param name="address">The printer address.</param>
+    /// <param name="labelCount">The number of labels in the attempt.</param>
+    /// <param name="printResult">The value returned to the server: empty on success, otherwise the failure reason.</param>
+    /// <param name="elapsed">How long the attempt took.</param>
+    private void RecordPrintResult( string address, int labelCount, string printResult, TimeSpan elapsed )
+    {
+        var printEvent = _metrics.Record( address: address,
+            labelCount: labelCount,
+            reason: printResult,
+            elapsed: elapsed,
+            slowThresholdMilliseconds: _slowPrintMilliseconds );
+
+        if ( !printEvent.ExceededRockTimeout )
+        {
+            return;
+        }
+
+        // Rock's check-in kiosk stops waiting after a few seconds and shows its
+        // own generic timeout message. Anything that lands after that point was
+        // never seen by the operator, whether it eventually worked or not, so
+        // it is worth calling out separately from a plain success or failure.
+        if ( printEvent.Succeeded )
+        {
+            _logger.LogWarning( "Printed to {address} after {elapsed}ms, too late for the server to report it. Check-in most likely showed a timeout even though the labels printed.",
+                address, printEvent.ElapsedMilliseconds );
+        }
+        else
+        {
+            _logger.LogWarning( "Print to {address} failed after {elapsed}ms, too late for the server to report it. Check-in most likely showed a timeout rather than this reason.",
+                address, printEvent.ElapsedMilliseconds );
         }
     }
 
