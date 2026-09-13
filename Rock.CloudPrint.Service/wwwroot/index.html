@@ -48,6 +48,9 @@
             <div class="flex items-center space-x-3">
                 <img src="/icon.png" alt="Rock Cloud Print" class="w-8 h-8">
                 <h1 class="text-lg font-semibold text-gray-900">Rock Cloud Print</h1>
+                <span id="version-badge"
+                    class="hidden text-xs font-medium text-gray-500 bg-gray-100 border border-gray-200
+                           rounded px-1.5 py-0.5 tabular-nums"></span>
             </div>
             <div class="flex items-center space-x-2">
                 <button id="logout-btn" onclick="doLogout()"
@@ -119,8 +122,34 @@
                 <p id="connected-since" class="mt-1 text-sm font-semibold text-gray-800 tabular-nums">—</p>
             </div>
             <div class="bg-white rounded-lg border border-gray-200 p-4">
-                <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Labels Printed</p>
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Labels Requested</p>
                 <p id="labels-count" class="mt-1 text-2xl font-bold text-gray-900 tabular-nums">0</p>
+            </div>
+        </div>
+
+        <div id="print-health" class="hidden bg-white rounded-lg border border-gray-200 p-5">
+            <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Print Results</p>
+
+            <div class="mt-3 grid grid-cols-3 gap-4">
+                <div>
+                    <p class="text-xs text-gray-500">Printed</p>
+                    <p id="printed-count" class="mt-0.5 text-xl font-bold text-green-700 tabular-nums">0</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Failed</p>
+                    <p id="failed-count" class="mt-0.5 text-xl font-bold text-gray-400 tabular-nums">0</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500" title="Finished after the Rock server stopped waiting, so check-in showed a timeout instead of the result">Too&nbsp;Slow</p>
+                    <p id="slow-count" class="mt-0.5 text-xl font-bold text-gray-400 tabular-nums">0</p>
+                </div>
+            </div>
+
+            <div id="last-failure" class="hidden mt-4 pt-4 border-t border-gray-100">
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Last Failure</p>
+                <p id="last-failure-reason" class="mt-1 text-sm font-medium text-red-700 break-all"></p>
+                <p id="last-failure-detail" class="mt-1 text-xs text-gray-500 tabular-nums"></p>
+                <p id="last-failure-note" class="hidden mt-1 text-xs text-gray-500"></p>
             </div>
         </div>
 
@@ -423,6 +452,9 @@
                 if ( !resp.ok ) return;
                 const d = await resp.json();
 
+                applyVersion( d.version );
+                updatePrintHealth( d );
+
                 const dot    = document.getElementById( 'status-dot' );
                 const text   = document.getElementById( 'status-text' );
                 const banner = document.getElementById( 'not-configured-banner' );
@@ -453,6 +485,66 @@
             } catch ( _ ) {}
         }
 
+        // Shows the build version beside the title. It never changes while the
+        // page is open, so this only does work the first time.
+        let versionShown = false;
+        function applyVersion( version ) {
+            if ( versionShown || !version ) return;
+            const badge = document.getElementById( 'version-badge' );
+            badge.textContent = version;
+            badge.classList.remove( 'hidden' );
+            versionShown = true;
+        }
+
+        // Printed / failed / too-slow counts, plus what went wrong last.
+        function updatePrintHealth( d ) {
+            const panel   = document.getElementById( 'print-health' );
+            const printed = d.labelsPrinted || 0;
+            const failed  = d.labelsFailed  || 0;
+            const slow    = d.slowPrints    || 0;
+
+            if ( !d.isConnected && printed === 0 && failed === 0 ) {
+                panel.classList.add( 'hidden' );
+                return;
+            }
+            panel.classList.remove( 'hidden' );
+
+            document.getElementById( 'printed-count' ).textContent = printed.toLocaleString();
+
+            const failedEl = document.getElementById( 'failed-count' );
+            failedEl.textContent = failed.toLocaleString();
+            failedEl.className   = 'mt-0.5 text-xl font-bold tabular-nums '
+                + ( failed > 0 ? 'text-red-600' : 'text-gray-400' );
+
+            const slowEl = document.getElementById( 'slow-count' );
+            slowEl.textContent = slow.toLocaleString();
+            slowEl.className   = 'mt-0.5 text-xl font-bold tabular-nums '
+                + ( slow > 0 ? 'text-yellow-600' : 'text-gray-400' );
+
+            const block = document.getElementById( 'last-failure' );
+            const f     = d.lastFailure;
+
+            if ( !f ) {
+                block.classList.add( 'hidden' );
+                return;
+            }
+            block.classList.remove( 'hidden' );
+
+            // This is the same string the server was given, so it matches what
+            // check-in displayed to the operator.
+            document.getElementById( 'last-failure-reason' ).textContent = f.reason || 'Unknown error';
+            document.getElementById( 'last-failure-detail' ).textContent =
+                f.address + ' · ' + fmtDate( f.at ) + ' · ' + (f.elapsedMilliseconds || 0).toLocaleString() + 'ms';
+
+            const note = document.getElementById( 'last-failure-note' );
+            if ( f.exceededRockTimeout ) {
+                note.textContent = 'Finished after the Rock server stopped waiting, so check-in showed a timeout instead of this message.';
+                note.classList.remove( 'hidden' );
+            } else {
+                note.classList.add( 'hidden' );
+            }
+        }
+
         // ── Logs ──────────────────────────────────────────────────────────
         const LEVEL_COLORS = {
             Critical:    'text-red-400',
@@ -463,28 +555,56 @@
             Trace:       'text-gray-600',
         };
 
-        let displayedCount = 0;
+        // Position within the service's log buffer. We ask only for what is newer
+        // than this, so the pane keeps up regardless of how much has been logged.
+        let logLastSeq     = 0;
+        let logInstanceId  = null;
+
+        // A divider for something that happened to the stream itself rather than
+        // a logged event - a restart, or entries that aged out before we asked.
+        function appendLogNotice( list, text ) {
+            const row = document.createElement( 'div' );
+            row.className = 'text-xs leading-5 text-gray-500 italic py-1';
+            row.textContent = '— ' + text + ' —';
+            list.appendChild( row );
+        }
 
         async function refreshLogs() {
             try {
-                const resp    = await authFetch( '/api/logs' );
+                const resp = await authFetch( '/api/logs' + ( logLastSeq ? '?after=' + logLastSeq : '' ) );
                 if ( !resp.ok ) return;
-                const entries = await resp.json();
+                const data = await resp.json();
 
                 const list      = document.getElementById( 'log-list' );
                 const empty     = document.getElementById( 'log-empty' );
                 const container = document.getElementById( 'log-container' );
 
-                if ( entries.length === 0 ) {
-                    empty.classList.remove( 'hidden' );
+                // The service restarted, so its sequence numbers began again and
+                // the position we are holding refers to a run that is gone. Start
+                // over; the next poll fetches from the beginning of the new run.
+                if ( logInstanceId && data.instanceId !== logInstanceId ) {
+                    list.innerHTML = '';
+                    appendLogNotice( list, 'service restarted' );
+                    logInstanceId = data.instanceId;
+                    logLastSeq    = 0;
                     return;
                 }
-                empty.classList.add( 'hidden' );
+                logInstanceId = data.instanceId;
 
-                if ( entries.length > displayedCount ) {
+                const entries = data.entries || [];
+
+                if ( data.skipped > 0 ) {
+                    empty.classList.add( 'hidden' );
+                    appendLogNotice( list, data.skipped.toLocaleString() +
+                        ( data.skipped === 1 ? ' entry not shown' : ' entries not shown' ) );
+                }
+
+                if ( entries.length > 0 ) {
                     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 60;
 
-                    entries.slice( displayedCount ).forEach( e => {
+                    empty.classList.add( 'hidden' );
+
+                    entries.forEach( e => {
                         const color = LEVEL_COLORS[e.level] || 'text-gray-300';
                         const ts    = new Date( e.timestamp ).toLocaleTimeString( undefined, { hour12: false } );
                         const lvl   = (e.level || '').substring( 0, 4 ).toUpperCase();
@@ -498,19 +618,22 @@
                         list.appendChild( row );
                     } );
 
-                    displayedCount = entries.length;
-
                     if ( document.getElementById( 'log-autoscroll' ).checked && atBottom ) {
                         container.scrollTop = container.scrollHeight;
                     }
+                } else if ( list.children.length === 0 ) {
+                    empty.classList.remove( 'hidden' );
                 }
+
+                logLastSeq = data.lastSeq;
             } catch ( _ ) {}
         }
 
+        // Clears what is on screen only. The position is kept, so the pane picks
+        // up from now rather than replaying everything still in the buffer.
         function clearLogs() {
             document.getElementById( 'log-list'  ).innerHTML = '';
             document.getElementById( 'log-empty' ).classList.remove( 'hidden' );
-            displayedCount = 0;
         }
 
         function escHtml( str ) {

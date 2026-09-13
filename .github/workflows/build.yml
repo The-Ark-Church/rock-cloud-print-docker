@@ -27,5 +27,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: false
+          # Nothing is published here, but passing a version exercises the same
+          # build argument the release workflow uses, so broken version plumbing
+          # fails on the pull request rather than at release time. It has to be a
+          # valid version string, which is the constraint this is proving.
+          build-args: |
+            VERSION=0.0.0-dev.${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

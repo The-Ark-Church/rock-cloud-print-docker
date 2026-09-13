@@ -59,6 +59,11 @@ class ProxyWorker : BackgroundService
 
     private ProxyStatus _status;
 
+    /// <summary>
+    /// Records the outcome of each print attempt for the web UI.
+    /// </summary>
+    private readonly PrintMetrics _metrics;
+
     #endregion
 
     /// <summary>
@@ -71,6 +76,7 @@ class ProxyWorker : BackgroundService
         _logger = serviceProvider.GetRequiredService<ILogger<ProxyWorker>>();
         _optionsMonitor = serviceProvider.GetRequiredService<IOptionsMonitor<CloudPrintOptions>>();
         _status = serviceProvider.GetRequiredService<ProxyStatus>();
+        _metrics = serviceProvider.GetRequiredService<PrintMetrics>();
 
         _optionsMonitor.OnChange( OnConfigurationChanged );
     }
@@ -117,7 +123,7 @@ class ProxyWorker : BackgroundService
         }
 
         var ws = await ConnectAsync( cancellationToken );
-        var proxy = new ProxyClientWebSocket( ws, _logger, _status );
+        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds );
 
         _status.SetConnected( true );
 

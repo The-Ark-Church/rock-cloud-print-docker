@@ -188,12 +188,31 @@ When a PIN is set this way it cannot be changed through the web UI — the Setti
 
 | Page | What it shows |
 |---|---|
-| **Dashboard** | Connection status (green/amber/grey), start time, time connected, total labels printed since start |
-| **Logs** | Live service log stream (last 300 entries), color-coded by level. Add `?limit=2000` to `/api/logs` for the full buffer |
+| **Dashboard** | Connection status (green/amber/grey), start time, time connected, labels requested since start, and a Print Results panel: labels printed, labels failed, prints that finished too slowly, and the reason for the most recent failure |
+| **Logs** | Live service log stream, color-coded by level |
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
 | **Settings → Security** | Set, change, or remove the web UI PIN |
 
-The dashboard auto-refreshes every 2 seconds. The log panel refreshes every 3 seconds when visible.
+The running version is shown beside the title in the header.
+
+The dashboard auto-refreshes every 2 seconds. The log panel refreshes every 3
+seconds when visible, fetching only entries it has not already shown.
+
+### Reading the Print Results panel
+
+**Labels Requested** counts every label the Rock server asked for, whether or not
+it reached a printer. **Printed** and **Failed** split that total by what actually
+happened.
+
+**Too Slow** counts prints that finished after the Rock server stopped waiting.
+Rock's check-in kiosk allows five seconds for a print and then shows the operator
+its own timeout message, so anything slower than that finished too late for the
+operator to see the real result — even when the labels printed correctly a moment
+later. Adjust the threshold with `SlowPrintMilliseconds` (default `5000`, set to
+`0` to disable the check).
+
+When a print fails, the reason shown is the exact message the proxy returned to
+Rock, so it matches what appeared on the check-in screen.
 
 ---
 
@@ -414,16 +433,19 @@ The core proxy logic — WebSocket connection to Rock, raw TCP forwarding to pri
 |---|---|
 | `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; removed Windows runtime identifier, single-file publish, and Windows-only packages |
 | `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware |
-| `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` property for PIN/password protection |
+| `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` property for PIN/password protection, and `SlowPrintMilliseconds` for the slow-print threshold |
+| `Rock.CloudPrint.Service/PrintMetrics.cs` | New — records the outcome of each print attempt: labels printed, labels failed, prints that outran the server, and the reason for the most recent failure |
+| `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, and each attempt is timed and recorded in `PrintMetrics` |
+| `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication |
-| `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only: cleared on restart |
+| `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only: cleared on restart. Entries carry a sequence number so the UI can fetch only what is new |
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` that captures `Rock.CloudPrint.*` log entries only |
 | `Rock.CloudPrint.Service/appsettings.json` | Removed EventLog config; added `Urls: http://+:8080` and default empty keys |
 | `Rock.CloudPrint.Service/wwwroot/index.html` | New — single-page web UI (Dashboard, Logs, Settings with Security panel) |
 | `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Bumped `System.Text.Json` from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) |
 | `Rock.CloudPrint.Service/wwwroot/index.html` | Tailwind is now loaded from the bundled `/app.css` instead of `cdn.tailwindcss.com`; the inline `<style>` block moved into `build/src/app.css` |
 | `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
-| `Dockerfile` | New — multi-stage Linux build; pre-creates `/app/config` directory; a Node stage compiles the Tailwind stylesheet so it can never drift from `index.html` |
+| `Dockerfile` | New — multi-stage Linux build; pre-creates `/app/config` directory; a Node stage compiles the Tailwind stylesheet so it can never drift from `index.html`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` directory mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file (lives in host `config/` directory, mounted into container) |
 

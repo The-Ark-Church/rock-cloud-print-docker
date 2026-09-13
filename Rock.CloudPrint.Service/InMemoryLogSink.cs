@@ -31,6 +31,16 @@ internal class InMemoryLogSink
     // wiped by one bad night and lose the print history for a whole service.
     private const int MaxEntries = 2000;
 
+    private long _nextSeq = 1;
+
+    /// <summary>
+    /// Identifies this buffer for the lifetime of the process. Sequence numbers
+    /// restart from one whenever the service does, so a client holding a
+    /// position from a previous run would otherwise wait forever for entries
+    /// that will never arrive. A changed value tells the client to start over.
+    /// </summary>
+    public string InstanceId { get; } = Guid.NewGuid().ToString( "n" );
+
     /// <summary>
     /// Adds a new log entry, evicting the oldest entry when at capacity.
     /// </summary>
@@ -38,6 +48,8 @@ internal class InMemoryLogSink
     {
         lock ( _lock )
         {
+            entry.Seq = _nextSeq++;
+
             _entries.Enqueue( entry );
 
             if ( _entries.Count > MaxEntries )
@@ -48,25 +60,76 @@ internal class InMemoryLogSink
     }
 
     /// <summary>
-    /// Returns a snapshot of buffered entries in chronological order, newest last.
+    /// Returns the entries newer than <paramref name="after"/>, in chronological
+    /// order, newest last.
     /// </summary>
-    /// <param name="limit">
-    /// Maximum number of entries to return, taken from the end of the buffer.
-    /// Pass <c>null</c> for the whole buffer. The web UI polls this endpoint every
-    /// few seconds, so it asks for a small window rather than the full capacity.
+    /// <param name="after">
+    /// The highest sequence number the caller already has. Pass zero for a fresh
+    /// start, which returns the tail of the buffer without reporting a gap.
     /// </param>
-    public IReadOnlyList<LogEntry> GetEntries( int? limit = null )
+    /// <param name="limit">
+    /// Maximum number of entries to return, taken from the end.
+    /// </param>
+    public LogTail GetTail( long after, int limit )
     {
         lock ( _lock )
         {
-            if ( limit is null || limit >= _entries.Count )
+            var lastSeq = _nextSeq - 1;
+            var oldestSeq = _entries.Count > 0 ? _entries.Peek().Seq : _nextSeq;
+            var isResuming = after > 0;
+
+            long skipped = 0;
+
+            // Entries the caller wanted but that were evicted before it asked.
+            if ( isResuming && after < oldestSeq - 1 )
             {
-                return _entries.ToList();
+                skipped = oldestSeq - 1 - after;
             }
 
-            return _entries.Skip( _entries.Count - Math.Max( 0, limit.Value ) ).ToList();
+            var matching = _entries.Where( e => e.Seq > after ).ToList();
+
+            if ( limit > 0 && matching.Count > limit )
+            {
+                // More arrived than the caller asked for. Only a resuming caller
+                // is missing anything; a fresh one simply asked for a tail.
+                if ( isResuming )
+                {
+                    skipped += matching.Count - limit;
+                }
+
+                matching = matching.Skip( matching.Count - limit ).ToList();
+            }
+
+            return new LogTail
+            {
+                InstanceId = InstanceId,
+                Entries = matching,
+                LastSeq = matching.Count > 0 ? matching[^1].Seq : Math.Max( after, lastSeq ),
+                Skipped = skipped
+            };
         }
     }
+}
+
+/// <summary>
+/// A page of log entries plus what the caller needs to ask for the next one.
+/// </summary>
+internal class LogTail
+{
+    /// <summary>Identifies the buffer these entries came from.</summary>
+    public string InstanceId { get; init; } = string.Empty;
+
+    /// <summary>The entries, chronological, newest last.</summary>
+    public IReadOnlyList<LogEntry> Entries { get; init; } = Array.Empty<LogEntry>();
+
+    /// <summary>The sequence number to pass as <c>after</c> next time.</summary>
+    public long LastSeq { get; init; }
+
+    /// <summary>
+    /// How many entries were lost between what the caller had and what it
+    /// received, either evicted from the buffer or trimmed by the limit.
+    /// </summary>
+    public long Skipped { get; init; }
 }
 
 /// <summary>
@@ -74,6 +137,12 @@ internal class InMemoryLogSink
 /// </summary>
 internal class LogEntry
 {
+    /// <summary>
+    /// Monotonic position within this process's buffer, assigned when the entry
+    /// is added. Restarts from one when the service restarts.
+    /// </summary>
+    public long Seq { get; set; }
+
     public DateTimeOffset Timestamp { get; init; }
 
     public string Level { get; init; } = string.Empty;

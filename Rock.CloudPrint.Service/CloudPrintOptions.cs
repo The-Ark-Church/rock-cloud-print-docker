@@ -46,4 +46,13 @@ internal class CloudPrintOptions
     /// <c>Password</c> environment variable in <c>docker-compose.yml</c>.
     /// </summary>
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// How long a print attempt may take before it is assumed the Rock server
+    /// stopped waiting for it. Rock's check-in kiosk allows five seconds for the
+    /// whole print operation and then shows the operator its own generic timeout
+    /// message, so anything slower than this finished too late for the operator
+    /// to have seen the real result. Set to zero to disable the check.
+    /// </summary>
+    public int SlowPrintMilliseconds { get; set; } = 5000;
 }
