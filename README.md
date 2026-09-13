@@ -189,7 +189,7 @@ When a PIN is set this way it cannot be changed through the web UI — the Setti
 | Page | What it shows |
 |---|---|
 | **Dashboard** | Connection status (green/amber/grey), start time, time connected, total labels printed since start |
-| **Logs** | Live service log stream (last 250 entries), color-coded by level |
+| **Logs** | Live service log stream (last 300 entries), color-coded by level. Add `?limit=2000` to `/api/logs` for the full buffer |
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
 | **Settings → Security** | Set, change, or remove the web UI PIN |
 
@@ -385,7 +385,7 @@ The core proxy logic — WebSocket connection to Rock, raw TCP forwarding to pri
 | `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware |
 | `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` property for PIN/password protection |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication |
-| `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (250 entries) for the Logs panel |
+| `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only: cleared on restart |
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` that captures `Rock.CloudPrint.*` log entries only |
 | `Rock.CloudPrint.Service/appsettings.json` | Removed EventLog config; added `Urls: http://+:8080` and default empty keys |
 | `Rock.CloudPrint.Service/wwwroot/index.html` | New — single-page web UI (Dashboard, Logs, Settings with Security panel) |

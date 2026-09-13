@@ -13,6 +13,14 @@ services:
       # environments that only support dataset/directory mounts compatible.
       - ./config:/app/config
     restart: unless-stopped
+    # Docker's json-file driver is unbounded by default. On the Raspberry Pi
+    # deployment this had grown past 74,000 lines with nothing to cap it.
+    # 5 x 10MB keeps a useful history without slowly filling the SD card.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     # Alternatively, supply settings entirely via environment variables
     # (these override anything written via the web UI):
     # environment:

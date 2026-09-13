@@ -259,8 +259,11 @@ public class Program
             return Results.Ok( new { success = true } );
         } );
 
-        app.MapGet( "/api/logs", ( InMemoryLogSink sink ) =>
-            Results.Ok( sink.GetEntries() ) );
+        // Returns the tail of the in-memory log buffer. The UI polls this every few
+        // seconds, so it defaults to a small window; pass ?limit=2000 to pull the
+        // full buffer when investigating something.
+        app.MapGet( "/api/logs", ( InMemoryLogSink sink, int? limit ) =>
+            Results.Ok( sink.GetEntries( limit ?? 300 ) ) );
 
         app.MapPost( "/api/restart", ( IHostApplicationLifetime lifetime ) =>
         {
