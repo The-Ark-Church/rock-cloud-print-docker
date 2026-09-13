@@ -184,7 +184,7 @@ Settings are stored in the `config/` directory outside the container and are una
 | Tab | Description |
 |---|---|
 | Dashboard | Connection status, uptime, labels printed counter |
-| Logs | Live service log (last 250 entries), color-coded by level |
+| Logs | Live service log (last 300 entries), color-coded by level |
 | Settings → Connection | Rock server URL, Proxy ID, Proxy Name |
 | Settings → Security | Set, change, or remove web UI PIN |
 
@@ -204,6 +204,6 @@ docker compose down          # stop
 
 ## Source
 
-[github.com/TheArkChurch/rock-cloud-print-docker](https://github.com/TheArkChurch/rock-cloud-print-docker)
+[github.com/The-Ark-Church/rock-cloud-print-docker](https://github.com/The-Ark-Church/rock-cloud-print-docker)
 
 Based on [Rock RMS](https://github.com/SparkDevNetwork/Rock) — licensed under the [Rock Community License](http://www.rockrms.com/license).

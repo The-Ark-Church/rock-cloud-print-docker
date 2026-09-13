@@ -13,6 +13,15 @@ services:
       # environments that only support dataset/directory mounts compatible.
       - ./config:/app/config
     restart: unless-stopped
+    # Docker's json-file driver keeps log output indefinitely by default, so a
+    # long-running container grows its log file without bound - worth capping on
+    # any host, and especially on one booting from an SD card.
+    # 5 x 10MB keeps a useful history without filling the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     # Alternatively, supply settings entirely via environment variables
     # (these override anything written via the web UI):
     # environment:

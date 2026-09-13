@@ -12,3 +12,9 @@ config/appsettings.json
 Thumbs.db
 .vscode/
 .idea/
+
+# Web UI build output
+# app.css is generated from build/src/app.css by `npm run css` (and by the
+# Docker build). Generated, so not committed.
+node_modules/
+Rock.CloudPrint.Service/wwwroot/app.css

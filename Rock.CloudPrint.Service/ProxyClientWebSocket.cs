@@ -90,7 +90,10 @@ class ProxyClientWebSocket : ProxyWebSocket
 
             await ns.WriteAsync( data, cancellationToken );
 
-            _logger.LogDebug( "Sent {bytes} bytes to printer {address}.", data.Length, address );
+            // Logged at Information, not Debug: this is the only record that a label
+            // actually reached a printer. At Debug it never appeared at the default
+            // log level, so print failures were visible but successes were not.
+            _logger.LogInformation( "Printed {bytes} bytes to {address}.", data.Length, address );
 
             return string.Empty;
         }

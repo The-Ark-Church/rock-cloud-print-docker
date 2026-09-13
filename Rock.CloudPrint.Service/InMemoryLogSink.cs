@@ -18,13 +18,18 @@ namespace Rock.CloudPrint.Service;
 
 /// <summary>
 /// A fixed-size circular buffer that stores recent log entries for display
-/// in the web UI.
+/// in the web UI. This lives in memory only - it is not written to disk and
+/// is cleared whenever the container restarts. For durable history use
+/// <c>docker logs</c>, which is rotated by the logging options in
+/// docker-compose.yml.
 /// </summary>
 internal class InMemoryLogSink
 {
     private readonly Queue<LogEntry> _entries = new();
     private readonly object _lock = new();
-    private const int MaxEntries = 250;
+    // A reconnect produces a multi-line exception chain, so a small buffer can be
+    // wiped by one bad night and lose the print history for a whole service.
+    private const int MaxEntries = 2000;
 
     /// <summary>
     /// Adds a new log entry, evicting the oldest entry when at capacity.
@@ -43,13 +48,23 @@ internal class InMemoryLogSink
     }
 
     /// <summary>
-    /// Returns a snapshot of all buffered entries in chronological order.
+    /// Returns a snapshot of buffered entries in chronological order, newest last.
     /// </summary>
-    public IReadOnlyList<LogEntry> GetEntries()
+    /// <param name="limit">
+    /// Maximum number of entries to return, taken from the end of the buffer.
+    /// Pass <c>null</c> for the whole buffer. The web UI polls this endpoint every
+    /// few seconds, so it asks for a small window rather than the full capacity.
+    /// </param>
+    public IReadOnlyList<LogEntry> GetEntries( int? limit = null )
     {
         lock ( _lock )
         {
-            return _entries.ToList();
+            if ( limit is null || limit >= _entries.Count )
+            {
+                return _entries.ToList();
+            }
+
+            return _entries.Skip( _entries.Count - Math.Max( 0, limit.Value ) ).ToList();
         }
     }
 }
