@@ -68,6 +68,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # A tag containing a hyphen is a pre-release by semver (v1.1.0-rc1).
+      # Without this the Release is published as "Latest", so a release
+      # candidate would be presented on the repo as the current version.
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
