@@ -204,6 +204,6 @@ docker compose down          # stop
 
 ## Source
 
-[github.com/TheArkChurch/rock-cloud-print-docker](https://github.com/TheArkChurch/rock-cloud-print-docker)
+[github.com/The-Ark-Church/rock-cloud-print-docker](https://github.com/The-Ark-Church/rock-cloud-print-docker)
 
 Based on [Rock RMS](https://github.com/SparkDevNetwork/Rock) — licensed under the [Rock Community License](http://www.rockrms.com/license).

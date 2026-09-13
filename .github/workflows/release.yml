@@ -1,0 +1,67 @@
+# Publishes a multi-architecture image to Docker Hub when a version tag is
+# pushed, and opens a GitHub Release for it.
+#
+# Trigger it by tagging a commit on main:
+#
+#     git tag v1.1.0
+#     git push origin v1.1.0
+#
+# The tag is the only place a version number is decided. A normal commit or
+# merge publishes nothing.
+#
+# Third-party actions are pinned to commit SHAs rather than floating tags so a
+# compromised or retagged action cannot silently change what runs here.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Least privilege: the job only needs to create the Release.
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The Dockerfile pins the heavy .NET and Node stages to linux/amd64, so
+      # only the two trivial RUN commands in the final stage are emulated.
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Turns the git tag v1.1.0 into docker tags 1.1.0, 1.1 and latest.
+      # Publishing them from one build is what keeps latest and the numbered
+      # tag identical - the thing that had drifted apart before this existed.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: asdfinit/rock-cloudprint
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          generate_release_notes: true

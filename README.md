@@ -39,7 +39,7 @@ sudo usermod -aG docker $USER   # lets you run docker without sudo (re-login aft
 1. **Clone the repo onto your server**
 
    ```bash
-   git clone https://github.com/TheArkChurch/rock-cloud-print-docker.git /opt/rock-cloudprint
+   git clone https://github.com/The-Ark-Church/rock-cloud-print-docker.git /opt/rock-cloudprint
    cd /opt/rock-cloudprint
    ```
 
@@ -319,6 +319,37 @@ npm install && npm run css
 ```
 
 ---
+
+## Versions and releases
+
+Images are published automatically by GitHub Actions whenever a version tag is
+pushed, so a Docker tag always corresponds to an exact commit.
+
+| Docker tag | What it means |
+|---|---|
+| `1.1.0` | An exact release. Never changes once published. |
+| `1.1` | Follows patch releases within 1.1 (`1.1.0`, `1.1.1`, ...). |
+| `latest` | The most recent release. |
+
+All three are published from a single build, so `latest` is always identical to
+the numbered release it came from.
+
+**For production, pin an exact version.** `latest` is convenient for trying the
+project out, but on a machine that prints check-in labels you generally want
+upgrades to happen when you choose them:
+
+```yaml
+services:
+  rock-cloudprint:
+    image: asdfinit/rock-cloudprint:1.1.0   # pinned, not :latest
+```
+
+Rolling back is then just editing that line to the previous version and running
+`docker compose up -d`.
+
+Version numbers follow [semantic versioning](https://semver.org): the patch
+number changes for fixes, the minor for new functionality that breaks nothing,
+and the major if an upgrade requires you to change something on your end.
 
 ## Updating
 
