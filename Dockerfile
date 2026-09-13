@@ -41,9 +41,12 @@ COPY Rock.CloudPrint.Shared.Common/ Rock.CloudPrint.Shared.Common/
 COPY --from=css /src/Rock.CloudPrint.Service/wwwroot/app.css Rock.CloudPrint.Service/wwwroot/app.css
 
 # The version the web UI reports. CI passes the git tag, so what the UI shows and
-# what the image is tagged with come from the same place and cannot drift. A
-# local build leaves this as "dev".
-ARG VERSION=dev
+# what the image is tagged with come from the same place and cannot drift.
+#
+# This must be a valid version string - the SDK validates it during restore and
+# fails the build otherwise. The release workflow only ever runs on a v*.*.* tag,
+# so the value it passes is always well formed. A local build reports 0.0.0-dev.
+ARG VERSION=0.0.0-dev
 
 RUN dotnet publish Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj \
     -c Release \
