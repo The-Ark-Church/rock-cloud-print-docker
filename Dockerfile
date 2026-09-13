@@ -58,6 +58,16 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
+# Basic network diagnostics, so someone with a shell on this container can work
+# out why a printer is unreachable without installing anything at the time -
+# which on TrueNAS or Portainer is awkward and lost on every recreate.
+#
+# iproute2 matters most: on a bridged deployment the container has its own subnet
+# and `ip route get <printer>` shows immediately whether traffic is routed out or
+# wrongly treated as local. dnsutils is deliberately absent - printer addresses
+# are parsed as literal IPs and never resolved, so DNS plays no part in printing.
+RUN apt-get update  && apt-get install -y --no-install-recommends iputils-ping iproute2  && rm -rf /var/lib/apt/lists/*
+
 # Pre-create the config directory. When operators bind-mount a host directory
 # here (e.g. ./config or a TrueNAS dataset) Docker uses this as the mount
 # point. Without it Docker would create the directory as root, which can cause

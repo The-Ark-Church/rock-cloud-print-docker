@@ -88,6 +88,10 @@
                 class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
                 Logs
             </button>
+            <button id="tab-printers" onclick="showTab('printers')"
+                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
+                Printers
+            </button>
             <button id="tab-settings" onclick="showTab('settings')"
                 class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
                 Settings
@@ -182,6 +186,36 @@
             </div>
 
         </div>
+    </div>
+
+    <!-- ── Printers ──────────────────────────────────────────────────── -->
+    <div id="pane-printers" class="hidden max-w-4xl mx-auto px-6 mt-6 pb-12 space-y-4">
+
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <h2 class="text-sm font-semibold text-gray-900">Test a printer</h2>
+            <p class="mt-1 text-sm text-gray-600">
+                Opens a connection to the printer the same way a print does, without printing anything.
+            </p>
+
+            <div class="mt-4 flex flex-col sm:flex-row sm:items-start gap-2">
+                <div class="flex-1">
+                    <input id="printer-test-address" type="text" placeholder="192.168.1.50 or 192.168.1.50:9100"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <p class="mt-1 text-xs text-gray-500">
+                        An IP address, with an optional port. Printer names are not supported.
+                    </p>
+                </div>
+                <button id="printer-test-btn" onclick="testPrinter()"
+                    class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md
+                           hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    Test
+                </button>
+            </div>
+
+            <div id="printer-test-result" class="hidden mt-4 rounded-md p-3 text-sm"></div>
+        </div>
+
     </div>
 
     <!-- ── Settings ──────────────────────────────────────────────────── -->
@@ -423,7 +457,7 @@
 
         // ── Tab management ────────────────────────────────────────────────
         function showTab( tab ) {
-            ['dashboard', 'logs', 'settings'].forEach( t => {
+            ['dashboard', 'logs', 'printers', 'settings'].forEach( t => {
                 const btn   = document.getElementById( 'tab-' + t );
                 const pane  = document.getElementById( 'pane-' + t );
                 const active = t === tab;
@@ -435,6 +469,7 @@
             } );
             if ( tab === 'settings' ) { loadSettings(); loadSecuritySection(); }
             if ( tab === 'logs'     ) { refreshLogs(); }
+            if ( tab === 'printers' ) { prefillPrinterAddress(); }
         }
 
         // ── Status polling ────────────────────────────────────────────────
@@ -524,6 +559,8 @@
             const block = document.getElementById( 'last-failure' );
             const f     = d.lastFailure;
 
+            lastFailedAddress = f ? f.address : lastFailedAddress;
+
             if ( !f ) {
                 block.classList.add( 'hidden' );
                 return;
@@ -542,6 +579,80 @@
                 note.classList.remove( 'hidden' );
             } else {
                 note.classList.add( 'hidden' );
+            }
+        }
+
+        // ── Printers ──────────────────────────────────────────────────────
+        // Remembered from the dashboard so a failed printer can be retested
+        // without typing its address again.
+        let lastFailedAddress = '';
+
+        function prefillPrinterAddress() {
+            const box = document.getElementById( 'printer-test-address' );
+            if ( !box.value && lastFailedAddress ) box.value = lastFailedAddress;
+        }
+
+        function showPrinterTestResult( kind, html ) {
+            const el = document.getElementById( 'printer-test-result' );
+            const styles = {
+                ok:      'bg-green-50 border border-green-200 text-green-800',
+                bad:     'bg-red-50 border border-red-200 text-red-800',
+                waiting: 'bg-gray-50 border border-gray-200 text-gray-600',
+            };
+            el.className   = 'mt-4 rounded-md p-3 text-sm ' + styles[kind];
+            el.innerHTML   = html;
+            el.classList.remove( 'hidden' );
+        }
+
+        async function testPrinter() {
+            const btn     = document.getElementById( 'printer-test-btn' );
+            const address = document.getElementById( 'printer-test-address' ).value.trim();
+
+            if ( !address ) {
+                showPrinterTestResult( 'bad', 'Enter a printer address first.' );
+                return;
+            }
+
+            btn.disabled = true;
+            showPrinterTestResult( 'waiting', 'Connecting to ' + escHtml( address ) + '…' );
+
+            try {
+                const resp = await authFetch( '/api/printer/test', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { address } )
+                } );
+
+                if ( resp.status === 429 ) {
+                    showPrinterTestResult( 'bad', 'Too many tests in a short time. Wait a moment and try again.' );
+                    return;
+                }
+
+                const d = await resp.json();
+
+                if ( !resp.ok ) {
+                    showPrinterTestResult( 'bad', escHtml( d.error || 'The test could not be run.' ) );
+                    return;
+                }
+
+                if ( d.ok ) {
+                    showPrinterTestResult( 'ok',
+                        '<span class="font-medium">Reached ' + escHtml( d.address ) + '</span> on port ' + d.port +
+                        ' in ' + d.elapsedMilliseconds.toLocaleString() + 'ms. Nothing was printed.' );
+                } else {
+                    let html = '<span class="font-medium">Could not reach ' + escHtml( d.address ) + '</span>' +
+                               ' on port ' + d.port + '.<br>' + escHtml( d.error );
+                    if ( d.timedOut ) {
+                        html += '<br><span class="text-xs">This is the test\'s own 5 second limit. ' +
+                                'Printing has no such limit, so a real print might still succeed — just too late ' +
+                                'for check-in, which gives up after about five seconds.</span>';
+                    }
+                    showPrinterTestResult( 'bad', html );
+                }
+            } catch ( _ ) {
+                showPrinterTestResult( 'bad', 'The test could not be run.' );
+            } finally {
+                btn.disabled = false;
             }
         }
 
