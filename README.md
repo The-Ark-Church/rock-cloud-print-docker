@@ -229,9 +229,9 @@ This container uses `network_mode: host` in `docker-compose.yml`. This means:
 
 > **Why host networking?** Printers use raw TCP sockets on port 9100. In standard Docker bridge networking the container gets its own IP and may not be able to reach devices on your local subnet. Host mode eliminates that problem entirely on Linux.
 
-> **No internet required for the admin UI.** Tailwind CSS is compiled into the image
-> at build time rather than fetched from a CDN, so the web UI renders correctly on an
-> isolated print VLAN with no outbound internet access.
+> **No third-party CDN at runtime.** Tailwind CSS is compiled into the image at build
+> time rather than fetched from a CDN, so the admin UI does not depend on an external
+> host being reachable, loads faster, and makes no third-party requests.
 
 > **Firewall note:** If your server runs `ufw`, open port 8080:
 > ```bash
