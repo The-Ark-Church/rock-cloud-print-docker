@@ -229,6 +229,10 @@ This container uses `network_mode: host` in `docker-compose.yml`. This means:
 
 > **Why host networking?** Printers use raw TCP sockets on port 9100. In standard Docker bridge networking the container gets its own IP and may not be able to reach devices on your local subnet. Host mode eliminates that problem entirely on Linux.
 
+> **No internet required for the admin UI.** Tailwind CSS is compiled into the image
+> at build time rather than fetched from a CDN, so the web UI renders correctly on an
+> isolated print VLAN with no outbound internet access.
+
 > **Firewall note:** If your server runs `ufw`, open port 8080:
 > ```bash
 > sudo ufw allow 8080/tcp
@@ -308,6 +312,10 @@ docker compose ps
 
 # Rebuild from source after a code change
 docker compose up -d --build --force-recreate
+
+# Rebuild just the web UI stylesheet during local development
+# (the Docker build does this automatically)
+npm install && npm run css
 ```
 
 ---
@@ -382,7 +390,9 @@ The core proxy logic — WebSocket connection to Rock, raw TCP forwarding to pri
 | `Rock.CloudPrint.Service/appsettings.json` | Removed EventLog config; added `Urls: http://+:8080` and default empty keys |
 | `Rock.CloudPrint.Service/wwwroot/index.html` | New — single-page web UI (Dashboard, Logs, Settings with Security panel) |
 | `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Bumped `System.Text.Json` from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) |
-| `Dockerfile` | New — multi-stage Linux build; pre-creates `/app/config` directory |
+| `Rock.CloudPrint.Service/wwwroot/index.html` | Tailwind is now loaded from the bundled `/app.css` instead of `cdn.tailwindcss.com`; the inline `<style>` block moved into `build/src/app.css` |
+| `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
+| `Dockerfile` | New — multi-stage Linux build; pre-creates `/app/config` directory; a Node stage compiles the Tailwind stylesheet so it can never drift from `index.html` |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` directory mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file (lives in host `config/` directory, mounted into container) |
 

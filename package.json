@@ -1,0 +1,12 @@
+{
+  "name": "rock-cloudprint-ui",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Build tooling for the Rock Cloud Print web UI stylesheet.",
+  "scripts": {
+    "css": "tailwindcss -c build/tailwind.config.js -i build/src/app.css -o Rock.CloudPrint.Service/wwwroot/app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

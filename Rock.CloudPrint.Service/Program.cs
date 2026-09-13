@@ -69,10 +69,12 @@ public class Program
         app.UseRateLimiter();
 
         // ── Security headers ───────────────────────────────────────
-        // Applied to every response (including static files). The CSP
-        // permits the Tailwind CDN script because the SPA currently loads
-        // Tailwind from cdn.tailwindcss.com — switching to a bundled copy
-        // would let us tighten this further.
+        // Applied to every response (including static files). Tailwind is
+        // compiled into wwwroot/app.css at build time rather than pulled from
+        // a CDN, so no third-party origin is allowed here and style-src needs
+        // no 'unsafe-inline'. script-src still needs 'unsafe-inline' because
+        // the SPA keeps its JavaScript in an inline <script> block and uses
+        // inline onclick handlers.
         //   X-Frame-Options:        defence against clickjacking embed
         //   X-Content-Type-Options: disables MIME-type sniffing
         //   Referrer-Policy:        prevents Rock URL leakage via Referer
@@ -86,8 +88,8 @@ public class Program
             ctx.Response.Headers["Cache-Control"]          = "no-store";
             ctx.Response.Headers["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; " +
-                "style-src 'self' 'unsafe-inline'; " +
+                "script-src 'self' 'unsafe-inline'; " +
+                "style-src 'self'; " +
                 "img-src 'self' data:;";
             await next();
         } );

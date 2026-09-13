@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Styles that previously lived in the inline <style> block in index.html.
+   Moving them here lets the CSP drop style-src 'unsafe-inline'. */
+@layer components {
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.4; }
+    }
+
+    .pulse {
+        animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    #log-list {
+        font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+    }
+}
