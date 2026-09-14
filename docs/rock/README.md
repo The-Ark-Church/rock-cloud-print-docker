@@ -23,6 +23,21 @@ including the template and the required Lava commands.
 4. Loops both lists through one activity that picks a channel per person: a
    push-capable device wins, otherwise the person's own communication preference.
 
+## Before you import: the shared secret
+
+Create a Rock **global attribute** named `CloudPrintWebhookSecret` (Admin Tools →
+General Settings → Global Attributes) holding a secret of your choosing, and put
+the same value in the proxy's **Webhook Secret** setting.
+
+The webhook reads it with `{{ 'Global' | Attribute:'CloudPrintWebhookSecret' }}`
+and compares it to the `X-CloudPrint-Token` header the proxy sends. A missing
+attribute reads as an empty string rather than an error, and the template treats
+empty as a failure on purpose — so without this, every request is rejected with
+401 and nothing is ever notified.
+
+Plain text is fine. It permits launching exactly one workflow, and any Rock
+administrator who can read it can already do far more directly.
+
 ## Importing it
 
 Admin Tools → Power Tools → Workflow Import, and choose
@@ -35,7 +50,8 @@ notifies nobody until you configure it.
 
 | Setting | Where | Notes |
 |---|---|---|
-| **SMS From** | `(if sms) SMS Send` action | **Set this first — see the warning below** |
+| **`CloudPrintWebhookSecret`** | **Rock global attribute** | **Create this first.** The webhook compares the proxy's `X-CloudPrint-Token` header against it. Until it exists the webhook rejects every request with 401, and the proxy's own Webhook Secret setting must hold the same value |
+| **SMS From** | `(if sms) SMS Send` action | **Set this — see the warning below** |
 | Worker Group | workflow attribute | Start with a group containing only yourself |
 | Volunteer Group | workflow attribute | Leave empty until the rest works |
 | Schedules | workflow attribute | Which schedules count as a live service |
