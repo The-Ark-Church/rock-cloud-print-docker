@@ -243,7 +243,7 @@ Defined Types → Lava Webhook):
 |---|---|
 | Value | `/notifications/cloud-print` (this becomes the URL path) |
 | Method | `POST` |
-| Enabled Lava Commands | `WorkflowActivate` |
+| Enabled Lava Commands | `RockEntity,WorkflowActivate` |
 | Response Content Type | `application/json` |
 
 Its template checks the secret, confirms the workflow type exists, launches it,
@@ -290,12 +290,53 @@ non-obvious parts commented:
 {%- endif -%}
 ```
 
+Both commands are required. `WorkflowActivate` launches the workflow;
+**`RockEntity` is what makes the `{% workflowtype %}` check above work** — without
+it the check finds nothing and every request returns 500.
+
 Then create the workflow type it launches. **Its attribute keys must match the
 parameter names above exactly** — a parameter with no matching attribute is
 silently discarded, leaving an empty field rather than an error.
 
 Store the shared secret in a global attribute named `CloudPrintWebhookSecret`,
 and set the same value in the proxy's settings.
+
+#### Four things that will cost you a day
+
+These are not obvious, and each one fails *silently* — producing an empty value
+rather than an error.
+
+1. **A webhook-launched workflow has no logged-in person, and Lava entity
+   commands apply Rock's entity security.** `{% groupmember %}` returns nothing
+   inside such a workflow while returning rows perfectly well when you test the
+   same template through `/api/Lava/RenderTemplate`, because that runs as your
+   API user. Add `securityenabled:'false'` to the entity command:
+
+   ```liquid
+   {% groupmember where:'GroupId == {{ groupId }} && GroupMemberStatus == 1' securityenabled:'false' %}
+   ```
+
+   Reading a collection off the entity instead — `group.Members` — also avoids
+   it, since navigation properties are not filtered.
+
+   **This one cannot be caught by testing.** The render endpoint runs as an
+   administrator, so the command succeeds there either way; it even accepts
+   parameters it does not recognise without complaint. Only a real
+   webhook-launched run proves it.
+
+2. **`Attribute:'Something'` returns display names, not guids.** A Schedules
+   attribute renders as `Sunday 9am, Sunday 11am`, so `where:'Guid == "Sunday
+   9am"'` matches nothing. Use `Attribute:'Something','RawValue'`.
+
+3. **`{% workflowactivate %}` parameters are delimited by single quotes.** A
+   failure reason containing an apostrophe — `Couldn't connect` — ends the
+   parameter early and breaks the tag. Sanitise free text into a variable before
+   the tag rather than inline.
+
+4. **Enum properties render as names but filter as integers.** `RSVP` displays
+   `Yes` but filters as `1`; the same applies to group member status and
+   communication preference. Compare the rendered name, or filter on the number
+   inside `where:` — never mix them.
 
 ### Checking it works
 
