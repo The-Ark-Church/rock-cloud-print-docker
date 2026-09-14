@@ -74,6 +74,35 @@ Settings persist in the dataset and survive container updates.
 
 ---
 
+## Portainer
+
+Deploy as a **Stack** — Portainer's equivalent of a Compose file.
+
+Go to **Stacks → Add stack → Web editor**, name it `rock-cloudprint`, and paste:
+
+```yaml
+services:
+  rock-cloudprint:
+    image: asdfinit/rock-cloudprint:latest
+    container_name: rock-cloudprint
+    ports:
+      - "8080:8080"
+    volumes:
+      - rock-cloudprint-config:/app/config
+    restart: unless-stopped
+
+volumes:
+  rock-cloudprint-config:
+```
+
+Click **Deploy the stack**, then open `http://<server-ip>:8080` → **Settings** → enter your Rock server URL and Proxy ID → **Save & Reconnect**.
+
+> **Use a named volume, not a bind mount.** The container runs as UID 1000 (`appuser`). A fresh named volume inherits that ownership and stays writable; a host directory Docker auto-creates comes up root-owned and saving settings will fail. For a bind mount, `chown -R 1000:1000` the host path first and use an absolute path — `./config` does not resolve predictably in Portainer web-editor stacks.
+
+> **Updating:** Portainer will not re-pull `latest` on its own. Use **Stacks → rock-cloudprint → Editor → Update the stack** with **Re-pull image** ticked.
+
+---
+
 ## Configuration
 
 Settings can be provided two ways. Environment variables take precedence over the web UI.
