@@ -479,6 +479,74 @@ Once the app starts, open `http://<truenas-ip>:8080`, go to **Settings**, fill i
 
 ---
 
+## Portainer deployment
+
+Portainer can deploy this image as a **Stack** — its equivalent of a Compose file. No local clone or build is needed; the image is pulled from Docker Hub.
+
+### 1. Create the stack
+
+Go to **Stacks → Add stack → Web editor**, name it `rock-cloudprint`, and paste:
+
+```yaml
+services:
+  rock-cloudprint:
+    image: asdfinit/rock-cloudprint:latest
+    container_name: rock-cloudprint
+    ports:
+      - "8080:8080"
+    volumes:
+      - rock-cloudprint-config:/app/config
+    restart: unless-stopped
+
+volumes:
+  rock-cloudprint-config:
+```
+
+Click **Deploy the stack**.
+
+> **Why a named volume?** The container runs as UID 1000 (`appuser`). A fresh named volume inherits that ownership from the image and stays writable. A bind mount to a host directory that Docker auto-creates comes up owned by `root`, and saving settings from the web UI will fail.
+>
+> To use a bind mount anyway (easier to back up), create it with the right owner first:
+> ```bash
+> sudo mkdir -p /opt/rock-cloudprint/config
+> sudo chown -R 1000:1000 /opt/rock-cloudprint/config
+> ```
+> then replace the volume line with `- /opt/rock-cloudprint/config:/app/config` and delete the top-level `volumes:` block. Use an absolute path — `./config` does not resolve predictably in Portainer web-editor stacks.
+
+### 2. Open the firewall
+
+If the host runs `ufw`:
+
+```bash
+sudo ufw allow 8080/tcp
+```
+
+### 3. Configure
+
+Open `http://<server-ip>:8080`, go to **Settings**, enter your Rock server URL and Proxy ID, and click **Save & Reconnect**. The Dashboard should show a green "Connected" status within a few seconds.
+
+Set a PIN under **Settings** as well — anyone who can reach port 8080 can read and change every setting.
+
+### Networking
+
+The stack above uses port mapping rather than `network_mode: host`. Outbound TCP to LAN printers on port 9100 works fine from bridge networking, so host mode is not required.
+
+Switch to `network_mode: host` only if your Docker bridge subnet (`172.17.0.0/16` by default) overlaps your LAN. If you do, remove the `ports:` block — Compose rejects a service that declares both.
+
+### Updating
+
+Because the image is tagged `latest`, Portainer will not re-pull it on its own. Go to **Stacks → rock-cloudprint → Editor → Update the stack** and tick **Re-pull image**. Settings in the volume are unaffected.
+
+To pin a specific build instead, resolve the digest:
+
+```bash
+docker buildx imagetools inspect asdfinit/rock-cloudprint:latest
+```
+
+and use `image: asdfinit/rock-cloudprint@sha256:<digest>` in the stack.
+
+---
+
 ## Printer addressing
 
 Printers are addressed from Rock, not from this app. In Rock's check-in printer configuration, set the printer address to the printer's local IP (and optional port):
@@ -560,6 +628,8 @@ docker compose up -d
 ```
 
 Your settings in `config/appsettings.json` are stored outside the container and are unaffected by updates.
+
+> **Portainer:** use **Stacks → rock-cloudprint → Editor → Update the stack** with **Re-pull image** ticked instead — see [Portainer deployment](#portainer-deployment).
 
 ---
 
