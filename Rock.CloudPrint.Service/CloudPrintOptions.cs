@@ -57,6 +57,24 @@ internal class CloudPrintOptions
     public int SlowPrintMilliseconds { get; set; } = 5000;
 
     /// <summary>
+    /// How long the connection may hear nothing at all from the server before
+    /// it is treated as dead and rebuilt, in seconds. Set to zero to disable.
+    ///
+    /// This exists because a half-open connection produces no close frame: the
+    /// socket stays open, the receive loop waits forever, and the proxy goes on
+    /// believing it is connected while no print ever arrives. Silence is the
+    /// only symptom available, so it must exceed the server's ping interval -
+    /// that interval is logged once per connection so this can be checked.
+    /// </summary>
+    public int ConnectionIdleTimeoutSeconds { get; set; } = 180;
+
+    /// <summary>
+    /// How often to send a WebSocket keepalive frame, in seconds. Zero disables
+    /// it and leaves the runtime default.
+    /// </summary>
+    public int KeepAliveSeconds { get; set; } = 30;
+
+    /// <summary>
     /// Whether print failures are reported to the Rock server. Off by default,
     /// and it does nothing at all until the Rock side exists - a Lava webhook, a
     /// workflow, and the communications inside that workflow. See the README.
