@@ -57,6 +57,14 @@ internal class CloudPrintOptions
     public int SlowPrintMilliseconds { get; set; } = 5000;
 
     /// <summary>
+    /// How long a printer has to accept a connection and take the data before
+    /// the attempt is abandoned, in seconds. Zero leaves it unbounded, which
+    /// lets the operating system retry a dead printer for far longer than the
+    /// server is willing to wait.
+    /// </summary>
+    public int PrinterTimeoutSeconds { get; set; } = 5;
+
+    /// <summary>
     /// How long a single send to the server may take, including time spent
     /// queued behind another send, before the connection is treated as dead,
     /// in seconds. Zero leaves it unbounded.
