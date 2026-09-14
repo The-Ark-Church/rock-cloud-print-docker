@@ -64,6 +64,11 @@ class ProxyWorker : BackgroundService
     /// </summary>
     private readonly PrintMetrics _metrics;
 
+    /// <summary>
+    /// Reports print problems back to the Rock server.
+    /// </summary>
+    private readonly FailureNotifier _notifier;
+
     #endregion
 
     /// <summary>
@@ -77,6 +82,7 @@ class ProxyWorker : BackgroundService
         _optionsMonitor = serviceProvider.GetRequiredService<IOptionsMonitor<CloudPrintOptions>>();
         _status = serviceProvider.GetRequiredService<ProxyStatus>();
         _metrics = serviceProvider.GetRequiredService<PrintMetrics>();
+        _notifier = serviceProvider.GetRequiredService<FailureNotifier>();
 
         _optionsMonitor.OnChange( OnConfigurationChanged );
     }
@@ -123,7 +129,7 @@ class ProxyWorker : BackgroundService
         }
 
         var ws = await ConnectAsync( cancellationToken );
-        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds );
+        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds, _notifier );
 
         _status.SetConnected( true );
 

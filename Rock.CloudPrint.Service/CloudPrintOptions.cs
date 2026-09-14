@@ -55,4 +55,33 @@ internal class CloudPrintOptions
     /// to have seen the real result. Set to zero to disable the check.
     /// </summary>
     public int SlowPrintMilliseconds { get; set; } = 5000;
+
+    /// <summary>
+    /// Whether print failures are reported to the Rock server. Off by default,
+    /// and it does nothing at all until the Rock side exists - a Lava webhook, a
+    /// workflow, and the communications inside that workflow. See the README.
+    /// </summary>
+    public bool NotificationsEnabled { get; set; }
+
+    /// <summary>
+    /// The full URL of the Lava webhook that receives failure notifications,
+    /// for example
+    /// <c>https://rock.example.com/Webhooks/Lava.ashx/notifications/cloud-print</c>.
+    /// Must be HTTPS: the shared secret travels in a request header.
+    /// </summary>
+    public string NotificationUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The shared secret sent as the <c>X-CloudPrint-Token</c> header. The
+    /// webhook compares it against a value held in Rock and rejects anything
+    /// else with a 401.
+    /// </summary>
+    public string NotificationSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// How long to stay quiet about a printer after reporting it, per kind of
+    /// event. One printer failing ten times in a minute produces one
+    /// notification; ten printers failing produce ten.
+    /// </summary>
+    public int NotificationCooldownMinutes { get; set; } = 5;
 }

@@ -184,6 +184,138 @@ When a PIN is set this way it cannot be changed through the web UI — the Setti
 
 ---
 
+## Print failure notifications
+
+The proxy can tell your Rock server when a printer fails, so somebody can be
+told about it. It is off by default.
+
+> ### This needs setting up in Rock first
+>
+> **The container only sends a message to a web address.** On its own that does
+> nothing useful. Someone has to create three things in Rock, and the container
+> cannot create any of them:
+>
+> 1. **A Lava webhook** to receive the message.
+> 2. **A workflow** for that webhook to launch.
+> 3. **The communications inside that workflow** — who gets told, and how.
+>
+> Until those exist, turning notifications on only records failures in the log.
+
+### What the proxy sends
+
+A POST with a JSON body and an `X-CloudPrint-Token` header holding your shared
+secret. The URL must be `https` — the secret travels in a request header.
+
+```json
+{
+  "schema": 1,
+  "event": "failed",
+  "printer": "192.168.1.50",
+  "reason": "No route to host",
+  "labelCount": 2,
+  "elapsedMs": 5001,
+  "occurredAt": "2026-01-01T09:15:00Z",
+  "proxyName": "Kids Check-in Proxy",
+  "proxyId": "da0BJR0Bpz",
+  "proxyVersion": "1.3.0",
+  "consecutiveFailures": 3,
+  "printersFailing": 5
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `event` | `failed`, `slow`, or `test` from the test button |
+| `reason` | The exact error the proxy got. Empty for `slow` and `test` |
+| `consecutiveFailures` | Failures for **this** printer since it last printed |
+| `printersFailing` | How many **distinct** printers are failing right now. One printer failing five times is a printer problem; five printers failing once each is a network problem |
+
+**The proxy expects HTTP 202 and a body containing `"accepted": true`.** Anything
+else is treated as a failure and raises a banner — including a bare `200`, which
+is what a Rock webhook returns when its Lava template fails.
+
+### Setting it up in Rock
+
+Create a **Lava Webhook** defined value (Admin Tools → General Settings →
+Defined Types → Lava Webhook):
+
+| Field | Value |
+|---|---|
+| Value | `/notifications/cloud-print` (this becomes the URL path) |
+| Method | `POST` |
+| Enabled Lava Commands | `WorkflowActivate` |
+| Response Content Type | `application/json` |
+
+Its template checks the secret, confirms the workflow type exists, launches it,
+and answers with a status code the proxy can act on. A worked example, with the
+non-obvious parts commented:
+
+```liquid
+{%- assign workflowTypeGuid = 'your-workflow-type-guid' -%}
+{%- assign expectedSecret = 'Global' | Attribute:'CloudPrintWebhookSecret' -%}
+
+{%- comment -%} Header names arrive lowercased, so match case-insensitively. {%- endcomment -%}
+{%- assign providedSecret = '' -%}
+{%- for h in Headers -%}
+{%- assign headerName = h[0] | Downcase -%}
+{%- if headerName == 'x-cloudprint-token' -%}{%- assign providedSecret = h[1] -%}{%- endif -%}
+{%- endfor -%}
+
+{%- comment -%}
+  Confirm the workflow type exists BEFORE activating. A workflow type keeps its
+  Guid through an export/import but gets a new Id, so a template referencing an
+  Id can silently launch the wrong workflow on another server. Always use the Guid.
+{%- endcomment -%}
+{%- assign typeFound = false -%}
+{% workflowtype where:'Guid == "{{ workflowTypeGuid }}"' %}
+{%- for t in workflowtypeItems -%}{%- assign typeFound = true -%}{%- endfor -%}
+{% endworkflowtype %}
+
+{%- if expectedSecret == '' or providedSecret != expectedSecret -%}
+{% httpresponse status:'401' %}{% endhttpresponse %}
+{"accepted":false,"error":"invalid token"}
+{%- elseif Body.printer == null or Body.printer == '' -%}
+{% httpresponse status:'400' %}{% endhttpresponse %}
+{"accepted":false,"error":"missing printer"}
+{%- elseif typeFound == false -%}
+{% httpresponse status:'500' %}{% endhttpresponse %}
+{"accepted":false,"error":"workflow type not found"}
+{%- else -%}
+{%- assign activateError = '' -%}
+{% workflowactivate workflowtype:'{{ workflowTypeGuid }}' workflowname:'Cloud Print failure' printer:'{{ Body.printer }}' event:'{{ Body.event }}' reason:'{{ Body.reason }}' consecutivefailures:'{{ Body.consecutiveFailures }}' printersfailing:'{{ Body.printersFailing }}' rawbody:'{{ RawBody }}' %}
+{%- assign activateError = Error -%}
+{% endworkflowactivate %}
+{% httpresponse status:'202' %}{% endhttpresponse %}
+{"accepted":true,"workflowError":"{{ activateError | Escape }}"}
+{%- endif -%}
+```
+
+Then create the workflow type it launches. **Its attribute keys must match the
+parameter names above exactly** — a parameter with no matching attribute is
+silently discarded, leaving an empty field rather than an error.
+
+Store the shared secret in a global attribute named `CloudPrintWebhookSecret`,
+and set the same value in the proxy's settings.
+
+### Checking it works
+
+Use **Send test notification** in Settings. It sends a real request marked
+`"event": "test"` and reports exactly what came back — so the URL, the secret,
+the webhook, the workflow type and the activation are all proved at setup time
+rather than during an outage.
+
+**If Rock is configured correctly, pressing it may message people.** That is how
+you know it worked.
+
+### How often it notifies
+
+Per printer, per kind of event, with a quiet period that defaults to five
+minutes. One printer failing ten times produces one notification; ten printers
+failing produce ten. A clean, on-time print clears the quiet period for that
+printer, so a genuine second outage is reported even if it follows closely.
+
+---
+
 ## Web UI reference
 
 | Page | What it shows |
@@ -191,6 +323,7 @@ When a PIN is set this way it cannot be changed through the web UI — the Setti
 | **Dashboard** | Connection status (green/amber/grey), start time, time connected, labels requested since start, and a Print Results panel: labels printed, labels failed, prints that finished too slowly, and the reason for the most recent failure |
 | **Logs** | Live service log stream, color-coded by level |
 | **Printers** | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
+| **Settings → Failure Notifications** | Tell Rock when a printer fails. Requires Rock-side setup first — see above |
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
 | **Settings → Security** | Set, change, or remove the web UI PIN |
 
@@ -469,6 +602,7 @@ The core proxy logic — WebSocket connection to Rock, raw TCP forwarding to pri
 | `Rock.CloudPrint.Service/PrintMetrics.cs` | New — records the outcome of each print attempt: labels printed, labels failed, prints that outran the server, and the reason for the most recent failure |
 | `Rock.CloudPrint.Service/PrinterAddress.cs` | New — printer address parsing, lifted out of the print path so the web UI's test runs the same code rather than a copy of it |
 | `Rock.CloudPrint.Service/PrinterTester.cs` | New — opens a connection to a printer and reports the result, without printing |
+| `Rock.CloudPrint.Service/FailureNotifier.cs` | New — reports print failures to a Rock webhook, with per-printer debouncing, and remembers the last attempt so the dashboard can name the fault |
 | `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, each attempt is timed and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
 | `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication |
