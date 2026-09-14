@@ -57,6 +57,17 @@ internal class CloudPrintOptions
     public int SlowPrintMilliseconds { get; set; } = 5000;
 
     /// <summary>
+    /// How long a single send to the server may take, including time spent
+    /// queued behind another send, before the connection is treated as dead,
+    /// in seconds. Zero leaves it unbounded.
+    ///
+    /// This is the primary protection against a stalled connection. Sends are
+    /// serialised, so one write that never completes blocks every later reply
+    /// and stops the socket being read at all.
+    /// </summary>
+    public int SendTimeoutSeconds { get; set; } = 10;
+
+    /// <summary>
     /// How long the connection may hear nothing at all from the server before
     /// it is treated as dead and rebuilt, in seconds. Set to zero to disable.
     ///

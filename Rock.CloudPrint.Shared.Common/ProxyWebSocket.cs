@@ -70,6 +70,14 @@ namespace Rock.CloudPrint.Shared
         /// Initializes a new instance of the <see cref="ProxyWebSocket"/> class.
         /// </summary>
         /// <param name="socket">The <see cref="WebSocket"/> object to be used for proxy communication.</param>
+        /// <summary>
+        /// How long a single send may take, including time spent waiting for
+        /// another send to finish, before the connection is treated as dead.
+        /// Zero leaves it unbounded, which is what allowed one stuck write to
+        /// stall the whole socket indefinitely.
+        /// </summary>
+        public TimeSpan SendTimeout { get; set; } = TimeSpan.FromSeconds( 10 );
+
         public ProxyWebSocket( WebSocket socket )
         {
             _socket = socket;
@@ -289,11 +297,35 @@ namespace Rock.CloudPrint.Shared
         /// <returns>A <see cref="Task"/> that indicates when the operation has completed.</returns>
         private async Task SendAsync( byte[] data, WebSocketMessageType messageType, CancellationToken cancellationToken )
         {
-            await _sendLock.WaitAsync( cancellationToken );
+            // Both waits are bounded, and that is the whole point.
+            //
+            // Every send serialises through this one lock, and the token passed
+            // in is the process-lifetime token, which never fires. So a single
+            // write to a connection the far end has stopped acknowledging used
+            // to block here for ever while holding the lock. The next message
+            // from the server would arrive, its handler would try to reply, and
+            // it would queue behind that stuck write - which left RunAsync
+            // parked inside OnMessageAsync, never returning to ReceiveAsync.
+            //
+            // The socket then stayed open and silent: nothing was read, so
+            // nothing was logged, and the server went on sending prints into a
+            // connection that could no longer answer. They were only delivered
+            // once the process died and the server re-sent them.
+            //
+            // Failing the send instead lets the exception reach RunAsync, which
+            // closes the socket and lets the supervisor reconnect.
+            using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource( cancellationToken );
+
+            if ( SendTimeout > TimeSpan.Zero )
+            {
+                timeoutSource.CancelAfter( SendTimeout );
+            }
+
+            await _sendLock.WaitAsync( timeoutSource.Token );
 
             try
             {
-                await _socket.SendAsync( new ArraySegment<byte>( data ), messageType, true, cancellationToken );
+                await _socket.SendAsync( new ArraySegment<byte>( data ), messageType, true, timeoutSource.Token );
             }
             finally
             {
