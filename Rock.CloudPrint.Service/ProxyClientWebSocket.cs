@@ -172,22 +172,10 @@ class ProxyClientWebSocket : ProxyWebSocket
     /// <returns>A new isntance of <see cref="Socket"/>.</returns>
     private static async Task<Socket> OpenSocketAsync( string ipAddress, CancellationToken cancellationToken )
     {
-        int printerPort = 9100;
-        var printerIpAddress = ipAddress;
-
-        // If the user specified in 0.0.0.0:1234 syntax then pull our the IP and port numbers.
-        if ( printerIpAddress.Contains( ':' ) )
-        {
-            var segments = printerIpAddress.Split( ':' );
-
-            printerIpAddress = segments[0];
-            if ( !int.TryParse( segments[1], out printerPort ) )
-            {
-                printerPort = 9100;
-            }
-        }
-
-        var printerEndpoint = new IPEndPoint( IPAddress.Parse( printerIpAddress ), printerPort );
+        // Parsing lives in PrinterAddress so the web UI's connection test runs
+        // exactly this code rather than its own copy of it. Behaviour, including
+        // which exceptions escape and what they say, is unchanged.
+        var printerEndpoint = PrinterAddress.Parse( ipAddress ).ToEndPoint();
         var socket = new Socket( AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp );
 
         await socket.ConnectAsync( printerEndpoint, cancellationToken );

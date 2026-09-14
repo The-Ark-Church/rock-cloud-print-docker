@@ -26,6 +26,18 @@ namespace Rock.CloudPrint.Service;
 
 public class Program
 {
+    /// <summary>
+    /// How long the printer test waits before giving up. The proxy itself
+    /// imposes no such limit; this exists so a person pressing a button gets an
+    /// answer rather than waiting on the operating system.
+    /// </summary>
+    private static readonly TimeSpan PrinterTestTimeout = TimeSpan.FromSeconds( 5 );
+
+    /// <summary>
+    /// Longest string accepted as a printer address, checked before parsing.
+    /// </summary>
+    private const int MaxPrinterAddressLength = 100;
+
     public static void Main( string[] args )
     {
         var builder = WebApplication.CreateBuilder( args );
@@ -39,6 +51,7 @@ public class Program
         builder.Services.Configure<CloudPrintOptions>( builder.Configuration );
         builder.Services.AddSingleton<ProxyStatus>();
         builder.Services.AddSingleton<PrintMetrics>();
+        builder.Services.AddSingleton<PrinterTester>();
         builder.Services.AddSingleton<AuthService>();
         builder.Services.AddHostedService<ProxyWorker>();
 
@@ -51,6 +64,20 @@ public class Program
             options.AddFixedWindowLimiter( "login", o =>
             {
                 o.PermitLimit = 5;
+                o.Window = TimeSpan.FromMinutes( 1 );
+                o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                o.QueueLimit = 0;
+            } );
+
+            // The printer test opens a TCP connection to whatever address it is
+            // given. That is not a capability an authenticated user lacks - they
+            // could already point the proxy at a server of their own choosing -
+            // but it is a far more convenient one, so it is capped. Ten a minute
+            // is generous for someone pressing a button and useless for sweeping
+            // a subnet.
+            options.AddFixedWindowLimiter( "printertest", o =>
+            {
+                o.PermitLimit = 10;
                 o.Window = TimeSpan.FromMinutes( 1 );
                 o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 o.QueueLimit = 0;
@@ -297,6 +324,34 @@ public class Program
         app.MapGet( "/api/logs", ( InMemoryLogSink sink, long? after, int? limit ) =>
             Results.Ok( sink.GetTail( after ?? 0, limit ?? 300 ) ) );
 
+        // Opens a connection to a printer and reports what happened, using the
+        // same parsing and the same kind of socket the print path uses.
+        //
+        // Connection only - nothing is written and nothing is read back, so this
+        // reports reachable or not and never any content from the far end.
+        app.MapPost( "/api/printer/test", async ( PrinterTestRequest request, PrinterTester tester, CancellationToken cancellationToken ) =>
+        {
+            var address = ( request.Address ?? string.Empty ).Trim();
+
+            if ( string.IsNullOrWhiteSpace( address ) )
+                return Results.Json( new { error = "Enter a printer address." }, statusCode: 400 );
+
+            // Bounded before parsing rather than after.
+            if ( address.Length > MaxPrinterAddressLength )
+                return Results.Json( new { error = "That address is too long to be a printer address." }, statusCode: 400 );
+
+            // Only one mode exists today. An unrecognised one is rejected rather
+            // than quietly downgraded, so a future client cannot believe it sent
+            // a label when it only opened a connection.
+            if ( !string.IsNullOrWhiteSpace( request.Mode )
+                && !string.Equals( request.Mode, "connect", StringComparison.OrdinalIgnoreCase ) )
+                return Results.Json( new { error = $"Unsupported test mode '{request.Mode}'." }, statusCode: 400 );
+
+            var result = await tester.TestAsync( address, null, PrinterTestTimeout, cancellationToken );
+
+            return Results.Ok( result );
+        } ).RequireRateLimiting( "printertest" );
+
         app.MapPost( "/api/restart", ( IHostApplicationLifetime lifetime ) =>
         {
             // Delay slightly so the HTTP response is fully sent before shutdown begins.
@@ -340,3 +395,4 @@ public class Program
 internal record SettingsRequest( string Url, string Name, string Id );
 internal record LoginRequest( string Password );
 internal record SecurityRequest( string? CurrentPassword, string? NewPassword );
+internal record PrinterTestRequest( string? Address, string? Mode );

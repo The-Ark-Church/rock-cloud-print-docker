@@ -176,7 +176,7 @@ When a PIN is set this way it cannot be changed through the web UI — the Setti
 
 | Situation | Effect |
 |---|---|
-| No PIN configured | Web UI is fully open — no login required |
+| No PIN configured | Web UI is fully open — no login required, and anyone who can reach the port can change settings and use the printer test. **Set a PIN as soon as the container is running.** |
 | PIN set via web UI | Login screen shown on every new browser session |
 | PIN set via env var | Login required; PIN cannot be changed via web UI |
 | Container restarts | In-memory sessions are cleared — users must log in again |
@@ -190,6 +190,7 @@ When a PIN is set this way it cannot be changed through the web UI — the Setti
 |---|---|
 | **Dashboard** | Connection status (green/amber/grey), start time, time connected, labels requested since start, and a Print Results panel: labels printed, labels failed, prints that finished too slowly, and the reason for the most recent failure |
 | **Logs** | Live service log stream, color-coded by level |
+| **Printers** | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
 | **Settings → Security** | Set, change, or remove the web UI PIN |
 
@@ -396,8 +397,39 @@ Your settings in `config/appsettings.json` are stored outside the container and 
 
 **Print jobs arrive (labels count increments) but nothing prints**
 - The printer IP or port in Rock's device record is wrong or unreachable
-- Test reachability from the server: `nc -zv 192.168.1.50 9100`
+- Open the **Printers** tab and test the address — it opens the same connection
+  a print does, without printing anything
 - Make sure the printer is on and on the same network as this server
+- If the test fails, work through *Diagnosing printer connectivity* below
+
+### Diagnosing printer connectivity
+
+Run these **inside the container**, which is what matters — the host being able
+to reach a printer does not guarantee the container can:
+
+```bash
+docker exec -it rock-cloudprint-rock-cloudprint-1 bash
+```
+
+| # | Command | What it tells you |
+|---|---|---|
+| 1 | `ip route get <printer-ip>` | Whether the printer is routed out through a gateway (`via …` appears) or wrongly treated as local (no `via`) |
+| 2 | `ip -brief addr` | What address and subnet the container actually has |
+| 3 | `ping -c3 <printer-ip>` | Whether the printer answers at all, and whether ARP resolves |
+| 4 | `timeout 2 bash -c 'exec 3<>/dev/tcp/<printer-ip>/9100'` | Whether the printing port is open. This is the same thing a print does — exit code 0 means open |
+| 5 | `ip neigh` | What ARP resolved the address to |
+
+**Steps 1 and 2 only matter on a bridged deployment** such as TrueNAS. With
+`network_mode: host` the container shares the host's network stack, so they tell
+you nothing the host would not.
+
+**The missing `via` in step 1 is the one to look for.** If the printer's address
+falls inside the container's own subnet, the container treats it as a neighbour
+and the traffic never leaves — while the host looks perfectly healthy. The fix is
+to move the container's network off the range the printers use.
+
+Step 4 uses a feature built into `bash` rather than `nc`, which is not installed.
+The `nc -zv 192.168.1.50 9100` form works on the **host**, not in the container.
 
 **Port 8080 not accessible from browser**
 - Check the firewall: `sudo ufw status`
@@ -435,7 +467,9 @@ The core proxy logic — WebSocket connection to Rock, raw TCP forwarding to pri
 | `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware |
 | `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` property for PIN/password protection, and `SlowPrintMilliseconds` for the slow-print threshold |
 | `Rock.CloudPrint.Service/PrintMetrics.cs` | New — records the outcome of each print attempt: labels printed, labels failed, prints that outran the server, and the reason for the most recent failure |
-| `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, and each attempt is timed and recorded in `PrintMetrics` |
+| `Rock.CloudPrint.Service/PrinterAddress.cs` | New — printer address parsing, lifted out of the print path so the web UI's test runs the same code rather than a copy of it |
+| `Rock.CloudPrint.Service/PrinterTester.cs` | New — opens a connection to a printer and reports the result, without printing |
+| `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, each attempt is timed and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
 | `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication |
 | `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only: cleared on restart. Entries carry a sequence number so the UI can fetch only what is new |
@@ -445,7 +479,7 @@ The core proxy logic — WebSocket connection to Rock, raw TCP forwarding to pri
 | `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Bumped `System.Text.Json` from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) |
 | `Rock.CloudPrint.Service/wwwroot/index.html` | Tailwind is now loaded from the bundled `/app.css` instead of `cdn.tailwindcss.com`; the inline `<style>` block moved into `build/src/app.css` |
 | `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
-| `Dockerfile` | New — multi-stage Linux build; pre-creates `/app/config` directory; a Node stage compiles the Tailwind stylesheet so it can never drift from `index.html`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
+| `Dockerfile` | New — multi-stage Linux build; installs `iputils-ping` and `iproute2` for in-container network diagnostics; pre-creates `/app/config` directory; a Node stage compiles the Tailwind stylesheet so it can never drift from `index.html`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` directory mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file (lives in host `config/` directory, mounted into container) |
 
