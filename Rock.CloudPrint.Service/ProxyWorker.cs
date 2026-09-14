@@ -131,7 +131,12 @@ class ProxyWorker : BackgroundService
         }
 
         var ws = await ConnectAsync( cancellationToken );
-        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds, _notifier, _optionsMonitor.CurrentValue.ConnectionIdleTimeoutSeconds );
+        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds, _notifier, _optionsMonitor.CurrentValue.ConnectionIdleTimeoutSeconds )
+        {
+            SendTimeout = _optionsMonitor.CurrentValue.SendTimeoutSeconds > 0
+                ? TimeSpan.FromSeconds( _optionsMonitor.CurrentValue.SendTimeoutSeconds )
+                : TimeSpan.Zero
+        };
 
         _status.SetConnected( true );
 
