@@ -294,6 +294,10 @@ Both commands are required. `WorkflowActivate` launches the workflow;
 **`RockEntity` is what makes the `{% workflowtype %}` check above work** — without
 it the check finds nothing and every request returns 500.
 
+**A ready-made workflow is included** — see [`docs/rock/`](docs/rock/), which has
+an importable Rock workflow export and the configuration steps. It imports inert
+and notifies nobody until you set the groups.
+
 Then create the workflow type it launches. **Its attribute keys must match the
 parameter names above exactly** — a parameter with no matching attribute is
 silently discarded, leaving an empty field rather than an error.
