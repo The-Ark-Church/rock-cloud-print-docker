@@ -55,6 +55,22 @@ class ProxyClientWebSocket : ProxyWebSocket
     private readonly FailureNotifier _notifier;
 
     /// <summary>
+    /// How long the watchdog waits before treating silence as a dead link.
+    /// Held only so the observed ping interval can be logged beside it.
+    /// </summary>
+    private readonly int _idleTimeoutSeconds;
+
+    /// <summary>
+    /// When the last ping arrived, used to measure the server's ping interval.
+    /// </summary>
+    private DateTimeOffset? _lastPingReceivedAt;
+
+    /// <summary>
+    /// Whether the measured ping interval has been reported once already.
+    /// </summary>
+    private bool _pingIntervalReported;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProxyClientWebSocket"/> class.
     /// </summary>
     /// <param name="socket">The <see cref="WebSocket"/> used for communication.</param>
@@ -63,7 +79,7 @@ class ProxyClientWebSocket : ProxyWebSocket
     /// <param name="metrics">Records the outcome of each print attempt.</param>
     /// <param name="slowPrintMilliseconds">The point past which Rock is assumed to have stopped waiting.</param>
     /// <param name="notifier">Reports print problems back to the Rock server.</param>
-    public ProxyClientWebSocket( WebSocket socket, ILogger logger, ProxyStatus status, PrintMetrics metrics, int slowPrintMilliseconds, FailureNotifier notifier )
+    public ProxyClientWebSocket( WebSocket socket, ILogger logger, ProxyStatus status, PrintMetrics metrics, int slowPrintMilliseconds, FailureNotifier notifier, int idleTimeoutSeconds )
         : base( socket )
     {
         _logger = logger;
@@ -71,17 +87,48 @@ class ProxyClientWebSocket : ProxyWebSocket
         _metrics = metrics;
         _slowPrintMilliseconds = slowPrintMilliseconds;
         _notifier = notifier;
+        _idleTimeoutSeconds = idleTimeoutSeconds;
     }
 
     /// <inheritdoc/>
     protected override async Task OnMessageAsync( CloudPrintMessage message, ReadOnlyMemory<byte> extraData, CancellationToken cancellationToken )
     {
+        // Any message at all proves the link is alive. The watchdog in
+        // ProxyWorker has nothing else to go on: a half-open connection
+        // produces no close frame, so the receive loop simply waits forever.
+        _status.RecordMessageReceived();
+
         if ( message is CloudPrintMessagePing pingMessage )
         {
+            // Pings are the only traffic on an idle connection, so their
+            // interval is what the watchdog timeout has to clear. Logged once
+            // at Information when first measured, then at Debug, because a ping
+            // every few seconds would otherwise bury everything else.
+            var now = DateTimeOffset.Now;
+
+            if ( _lastPingReceivedAt.HasValue )
+            {
+                var interval = now - _lastPingReceivedAt.Value;
+
+                if ( !_pingIntervalReported )
+                {
+                    _pingIntervalReported = true;
+
+                    _logger.LogInformation( "Server ping interval is about {seconds:0.#}s. The connection watchdog gives up after {timeout}s of silence.",
+                        interval.TotalSeconds, _idleTimeoutSeconds );
+                }
+                else
+                {
+                    _logger.LogDebug( "Ping from server, {seconds:0.#}s since the last one.", interval.TotalSeconds );
+                }
+            }
+
+            _lastPingReceivedAt = now;
+
             var pongResponse = new CloudPrintResponsePing
             {
                 RequestedAt = pingMessage.SentAt,
-                RespondedAt = DateTimeOffset.Now
+                RespondedAt = now
             };
 
             await PostResponseAsync( message, pongResponse, cancellationToken );

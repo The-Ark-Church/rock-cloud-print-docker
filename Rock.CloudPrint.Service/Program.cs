@@ -258,6 +258,8 @@ public class Program
                     && !string.IsNullOrWhiteSpace( options.CurrentValue.Id ),
                 startedDateTime = status.StartedDateTime,
                 connectedDateTime = status.ConnectedDateTime,
+                lastMessageReceivedDateTime = status.LastMessageReceivedDateTime,
+                connectionIdleSeconds = status.IdleTime?.TotalSeconds,
                 totalLabelsPrinted = status.TotalPrinted,
                 labelsPrinted = metrics.SuccessfulLabels,
                 labelsFailed = metrics.FailedLabels,
