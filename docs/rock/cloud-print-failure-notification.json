@@ -9,7 +9,7 @@
         "IsActive": true,
         "WorkflowIdPrefix": "CPN",
         "Name": "Cloud Print Failure Notification",
-        "Description": "Launched by the Rock Cloud Print proxy's Lava webhook when a check-in label printer fails or prints slowly. Notifies every active member of the Worker Group on every event, and members of the Volunteer Group only while a service they are scheduled for is running. Each person gets one channel: a push-capable device wins, otherwise their own communication preference. DEV STATE: all three send actions are wired and LIVE, against groups containing only test people. BEFORE IMPORTING TO PRODUCTION: set both group attributes to a group containing only yourself, and review the push action - it reaches every registered device of whoever is in those groups.",
+        "Description": "Launched by the Rock Cloud Print proxy's Lava webhook when a check-in label printer fails or prints slowly. Notifies every active member of the Worker Group on every event, and members of the Volunteer Group only while a service they are scheduled for is running. Each person gets one channel: a push-capable device wins, otherwise their own communication preference. ~DEV STATE: all three send actions are wired and LIVE, but _you must populate_ the worker and volunteer groups.~\n\n*This Workflow Requires the Workflow Stimpack plugin*",
         "Order": 0,
         "WorkTerm": "Notification",
         "ProcessingIntervalSeconds": 300,
@@ -29,7 +29,7 @@
         "IsLoginRequired": false,
         "Slug": "cloud-print-failure-notification",
         "CreatedDateTime": "2026-09-13T23:41:36.923",
-        "ModifiedDateTime": "2026-09-14T12:15:35.28"
+        "ModifiedDateTime": "2026-09-14T15:34:46.05"
       },
       "Transforms": {},
       "References": [
@@ -200,9 +200,9 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n  address when nothing matches, which is what the message wording expects.\n  Verified: 192.168.1.50 -> kids-checkin-01.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign printer = Workflow | Attribute:'printer' -%}\n{%- assign printerName = '' -%}\n{% device where:'IPAddress == \"{{ printer }}\"' select:'new ( Name AS Name)' limit:'1' %}\n{% enddevice %}\n{%- assign printerName = device.Name -%}\n{%- if printerName == null or printerName == '' -%}\n    {%- assign printerName = printer -%}\n{%- endif -%}\n{{ printerName }}",
-        "PersistedTextValue": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n  address when nothing matches, which is what the message wording expects.\n  Verified: 192.168.1.50 -> kids-checkin-01.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign printer = Workflow | Attribute:'printer' -%}\n{%- assign printerName = '' -%}\n{% device where:'IPAddress == \"{{ printer }}\"' select:'new ( Name AS Name)' limit:'1' %}\n{% enddevice %}\n{%- assign printerName = device.Name -%}\n{%- if printerName == null or printerName == '' -%}\n    {%- assign printerName = printer -%}\n{%- endif -%}\n{{ printerName }}",
-        "PersistedHtmlValue": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n  address when nothing matches, which is what the message wording expects.\n  Verified: 192.168.1.50 -&gt; kids-checkin-01.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign printer = Workflow | Attribute:&#39;printer&#39; -%}\n{%- assign printerName = &#39;&#39; -%}\n{% device where:&#39;IPAddress == &quot;{{ printer }}&quot;&#39; select:&#39;new ( Name AS Name)&#39; limit:&#39;1&#39; %}\n{% enddevice %}\n{%- assign printerName = device.Name -%}\n{%- if printerName == null or printerName == &#39;&#39; -%}\n    {%- assign printerName = printer -%}\n{%- endif -%}\n{{ printerName }}",
+        "Value": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n  address when nothing matches, which is what the message wording expects.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign printer = Workflow | Attribute:'printer' -%}\n{%- assign printerName = '' -%}\n{% device where:'IPAddress == \"{{ printer }}\"' select:'new ( Name AS Name)' limit:'1' %}\n{% enddevice %}\n{%- assign printerName = device.Name -%}\n{%- if printerName == null or printerName == '' -%}\n    {%- assign printerName = printer -%}\n{%- endif -%}\n{{ printerName }}",
+        "PersistedTextValue": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n  address when nothing matches, which is what the message wording expects.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign printer = Workflow | Attribute:'printer' -%}\n{%- assign printerName = '' -%}\n{% device where:'IPAddress == \"{{ printer }}\"' select:'new ( Name AS Name)' limit:'1' %}\n{% enddevice %}\n{%- assign printerName = device.Name -%}\n{%- if printerName == null or printerName == '' -%}\n    {%- assign printerName = printer -%}\n{%- endif -%}\n{{ printerName }}",
+        "PersistedHtmlValue": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n  address when nothing matches, which is what the message wording expects.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign printer = Workflow | Attribute:&#39;printer&#39; -%}\n{%- assign printerName = &#39;&#39; -%}\n{% device where:&#39;IPAddress == &quot;{{ printer }}&quot;&#39; select:&#39;new ( Name AS Name)&#39; limit:&#39;1&#39; %}\n{% enddevice %}\n{%- assign printerName = device.Name -%}\n{%- if printerName == null or printerName == &#39;&#39; -%}\n    {%- assign printerName = printer -%}\n{%- endif -%}\n{{ printerName }}",
         "PersistedCondensedTextValue": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n ...",
         "PersistedCondensedHtmlValue": "{%- comment -%}\n  Friendly printer name from the IP the proxy sent. Falls back to the raw\n ...",
         "IsPersistedValueDirty": false,
@@ -211,7 +211,7 @@
         "ValueAsPersonId": null,
         "ValueAsBoolean": null,
         "CreatedDateTime": "2026-09-13T23:46:25.06",
-        "ModifiedDateTime": "2026-09-14T00:14:44.083"
+        "ModifiedDateTime": "2026-09-14T15:33:01.183"
       },
       "Transforms": {},
       "References": [
@@ -819,9 +819,9 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n  securityenabled:'false' is REQUIRED. A webhook-launched workflow has no\n  logged-in person, and entity commands apply Rock's entity security, so\n  without it this returns NOTHING - silently, with no error. It cannot be\n  caught through /api/Lava/RenderTemplate, which runs as an API user.\n\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'WorkerGroup','Object' -%}\n{%- assign list = '' -%}\n{%- if group.Id > 0 -%}\n    {% groupmember where:'GroupId == {{ group.Id }} && GroupMemberStatus == 1 && IsArchived == false' securityenabled:'false' %}\n        {%- for gm in groupmemberItems -%}\n            {%- assign list = list | Append:gm.Person.PrimaryAlias.Guid | Append:',' -%}\n        {%- endfor -%}\n    {% endgroupmember %}\n{%- endif -%}\n{{ list }}",
-        "PersistedTextValue": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n  securityenabled:'false' is REQUIRED. A webhook-launched workflow has no\n  logged-in person, and entity commands apply Rock's entity security, so\n  without it this returns NOTHING - silently, with no error. It cannot be\n  caught through /api/Lava/RenderTemplate, which runs as an API user.\n\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'WorkerGroup','Object' -%}\n{%- assign list = '' -%}\n{%- if group.Id > 0 -%}\n    {% groupmember where:'GroupId == {{ group.Id }} && GroupMemberStatus == 1 && IsArchived == false' securityenabled:'false' %}\n        {%- for gm in groupmemberItems -%}\n            {%- assign list = list | Append:gm.Person.PrimaryAlias.Guid | Append:',' -%}\n        {%- endfor -%}\n    {% endgroupmember %}\n{%- endif -%}\n{{ list }}",
-        "PersistedHtmlValue": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n  securityenabled:&#39;false&#39; is REQUIRED. A webhook-launched workflow has no\n  logged-in person, and entity commands apply Rock&#39;s entity security, so\n  without it this returns NOTHING - silently, with no error. It cannot be\n  caught through /api/Lava/RenderTemplate, which runs as an API user.\n\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:&#39;WorkerGroup&#39;,&#39;Object&#39; -%}\n{%- assign list = &#39;&#39; -%}\n{%- if group.Id &gt; 0 -%}\n    {% groupmember where:&#39;GroupId == {{ group.Id }} &amp;&amp; GroupMemberStatus == 1 &amp;&amp; IsArchived == false&#39; securityenabled:&#39;false&#39; %}\n        {%- for gm in groupmemberItems -%}\n            {%- assign list = list | Append:gm.Person.PrimaryAlias.Guid | Append:&#39;,&#39; -%}\n        {%- endfor -%}\n    {% endgroupmember %}\n{%- endif -%}\n{{ list }}",
+        "Value": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n  securityenabled:'false' is REQUIRED. A webhook-launched workflow has no\n  logged-in person, and entity commands apply Rock's entity security, so\n  without it this returns NOTHING - silently, with no error.\n\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'WorkerGroup','Object' -%}\n{%- assign list = '' -%}\n{%- if group.Id > 0 -%}\n    {% groupmember where:'GroupId == {{ group.Id }} && GroupMemberStatus == 1 && IsArchived == false' securityenabled:'false' %}\n        {%- for gm in groupmemberItems -%}\n            {%- assign list = list | Append:gm.Person.PrimaryAlias.Guid | Append:',' -%}\n        {%- endfor -%}\n    {% endgroupmember %}\n{%- endif -%}\n{{ list }}",
+        "PersistedTextValue": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n  securityenabled:'false' is REQUIRED. A webhook-launched workflow has no\n  logged-in person, and entity commands apply Rock's entity security, so\n  without it this returns NOTHING - silently, with no error.\n\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'WorkerGroup','Object' -%}\n{%- assign list = '' -%}\n{%- if group.Id > 0 -%}\n    {% groupmember where:'GroupId == {{ group.Id }} && GroupMemberStatus == 1 && IsArchived == false' securityenabled:'false' %}\n        {%- for gm in groupmemberItems -%}\n            {%- assign list = list | Append:gm.Person.PrimaryAlias.Guid | Append:',' -%}\n        {%- endfor -%}\n    {% endgroupmember %}\n{%- endif -%}\n{{ list }}",
+        "PersistedHtmlValue": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n  securityenabled:&#39;false&#39; is REQUIRED. A webhook-launched workflow has no\n  logged-in person, and entity commands apply Rock&#39;s entity security, so\n  without it this returns NOTHING - silently, with no error.\n\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:&#39;WorkerGroup&#39;,&#39;Object&#39; -%}\n{%- assign list = &#39;&#39; -%}\n{%- if group.Id &gt; 0 -%}\n    {% groupmember where:&#39;GroupId == {{ group.Id }} &amp;&amp; GroupMemberStatus == 1 &amp;&amp; IsArchived == false&#39; securityenabled:&#39;false&#39; %}\n        {%- for gm in groupmemberItems -%}\n            {%- assign list = list | Append:gm.Person.PrimaryAlias.Guid | Append:&#39;,&#39; -%}\n        {%- endfor -%}\n    {% endgroupmember %}\n{%- endif -%}\n{{ list }}",
         "PersistedCondensedTextValue": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n ...",
         "PersistedCondensedHtmlValue": "{%- comment -%}\n  Every active member of the worker group. No schedule check, no filtering.\n\n ...",
         "IsPersistedValueDirty": false,
@@ -830,7 +830,7 @@
         "ValueAsPersonId": null,
         "ValueAsBoolean": null,
         "CreatedDateTime": "2026-09-13T23:49:24.803",
-        "ModifiedDateTime": "2026-09-14T11:52:35.277"
+        "ModifiedDateTime": "2026-09-14T15:33:01.203"
       },
       "Transforms": {},
       "References": [
@@ -2011,9 +2011,9 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n  Worker List so nobody is told twice.\n\n  securityenabled:'false' on every entity command. A webhook-launched\n  workflow has no logged-in person and entity commands apply Rock's entity\n  security, which returns nothing silently. It does not bite these three on\n  our instance, but it DOES bite {% groupmember %}, and another instance may\n  be configured differently.\n\n  Attribute:'Schedules' returns the schedule NAMES - 'RawValue' is required.\n  RSVP != 0 keeps Yes, Maybe AND Unknown - do not tighten it.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'VolunteerGroup','Object' -%}\n{%- assign workerList = Workflow | Attribute:'WorkerList' -%}\n{%- assign offset = Workflow | Attribute:'OffsetMinutes' | AsInteger -%}\n{%- assign scheduleGuids = Workflow | Attribute:'Schedules','RawValue' -%}\n{%- assign today = 'Now' | Date:'yyyy-MM-dd' -%}\n{%- assign now = 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n{%- assign tomorrow = today | DateAdd:1,'d' | Date:'yyyy-MM-dd' -%}\n\n{%- assign live = '' -%}\n{%- assign scheduleList = scheduleGuids | Split:',' -%}\n{%- for entry in scheduleList -%}\n    {%- assign scheduleGuid = entry | Trim -%}\n    \n    {%- if scheduleGuid != '' -%}\n        {% schedule where:'Guid == \"{{ scheduleGuid }}\"' limit:'1' securityenabled:'false' %}\n            {%- for s in scheduleItems -%}\n                {%- assign startsAt = today | Append:'T' | Append:s.StartTimeOfDay -%}\n                {%- assign back = 0 | Minus:offset -%}\n                {%- assign opens = startsAt | DateAdd:back,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- assign closes = startsAt | DateAdd:s.DurationInMinutes,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- if now >= opens and now <= closes -%}\n                    {%- assign live = live | Append:s.Id | Append:',' -%}\n                {%- endif -%}\n            {%- endfor -%}\n        {% endschedule %}\n    {%- endif -%}\n{%- endfor -%}\n\n{%- assign list = '' -%}\n{%- if live != '' and group.Id > 0 -%}\n    {% attendanceoccurrence where:'GroupId == {{ group.Id }} && OccurrenceDate >= \"{{ today }}\" && OccurrenceDate < \"{{ tomorrow }}\"' limit:'20' securityenabled:'false' %}\n        {%- for o in attendanceoccurrenceItems -%}\n            {%- assign token = o.ScheduleId | Append:',' -%}\n            {%- if live contains token -%}\n                {% attendance where:'OccurrenceId == {{ o.Id }} && ScheduledToAttend == true && RSVP != 0' limit:'100' securityenabled:'false' %}\n                {%- for a in attendanceItems -%}\n                    {%- assign aliasGuid = a.PersonAlias.Person.PrimaryAlias.Guid -%}\n                    {%- unless workerList contains aliasGuid -%}\n                        {%- unless list contains aliasGuid -%}\n                            {%- assign list = list | Append:aliasGuid | Append:',' -%}\n                        {%- endunless -%}\n                    {%- endunless -%}\n                {%- endfor -%}\n                {% endattendance %}\n            {%- endif -%}\n        {%- endfor -%}\n    {% endattendanceoccurrence %}\n{%- endif -%}\n{{ list }}",
-        "PersistedTextValue": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n  Worker List so nobody is told twice.\n\n  securityenabled:'false' on every entity command. A webhook-launched\n  workflow has no logged-in person and entity commands apply Rock's entity\n  security, which returns nothing silently. It does not bite these three on\n  our instance, but it DOES bite {% groupmember %}, and another instance may\n  be configured differently.\n\n  Attribute:'Schedules' returns the schedule NAMES - 'RawValue' is required.\n  RSVP != 0 keeps Yes, Maybe AND Unknown - do not tighten it.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'VolunteerGroup','Object' -%}\n{%- assign workerList = Workflow | Attribute:'WorkerList' -%}\n{%- assign offset = Workflow | Attribute:'OffsetMinutes' | AsInteger -%}\n{%- assign scheduleGuids = Workflow | Attribute:'Schedules','RawValue' -%}\n{%- assign today = 'Now' | Date:'yyyy-MM-dd' -%}\n{%- assign now = 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n{%- assign tomorrow = today | DateAdd:1,'d' | Date:'yyyy-MM-dd' -%}\n\n{%- assign live = '' -%}\n{%- assign scheduleList = scheduleGuids | Split:',' -%}\n{%- for entry in scheduleList -%}\n    {%- assign scheduleGuid = entry | Trim -%}\n    \n    {%- if scheduleGuid != '' -%}\n        {% schedule where:'Guid == \"{{ scheduleGuid }}\"' limit:'1' securityenabled:'false' %}\n            {%- for s in scheduleItems -%}\n                {%- assign startsAt = today | Append:'T' | Append:s.StartTimeOfDay -%}\n                {%- assign back = 0 | Minus:offset -%}\n                {%- assign opens = startsAt | DateAdd:back,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- assign closes = startsAt | DateAdd:s.DurationInMinutes,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- if now >= opens and now <= closes -%}\n                    {%- assign live = live | Append:s.Id | Append:',' -%}\n                {%- endif -%}\n            {%- endfor -%}\n        {% endschedule %}\n    {%- endif -%}\n{%- endfor -%}\n\n{%- assign list = '' -%}\n{%- if live != '' and group.Id > 0 -%}\n    {% attendanceoccurrence where:'GroupId == {{ group.Id }} && OccurrenceDate >= \"{{ today }}\" && OccurrenceDate < \"{{ tomorrow }}\"' limit:'20' securityenabled:'false' %}\n        {%- for o in attendanceoccurrenceItems -%}\n            {%- assign token = o.ScheduleId | Append:',' -%}\n            {%- if live contains token -%}\n                {% attendance where:'OccurrenceId == {{ o.Id }} && ScheduledToAttend == true && RSVP != 0' limit:'100' securityenabled:'false' %}\n                {%- for a in attendanceItems -%}\n                    {%- assign aliasGuid = a.PersonAlias.Person.PrimaryAlias.Guid -%}\n                    {%- unless workerList contains aliasGuid -%}\n                        {%- unless list contains aliasGuid -%}\n                            {%- assign list = list | Append:aliasGuid | Append:',' -%}\n                        {%- endunless -%}\n                    {%- endunless -%}\n                {%- endfor -%}\n                {% endattendance %}\n            {%- endif -%}\n        {%- endfor -%}\n    {% endattendanceoccurrence %}\n{%- endif -%}\n{{ list }}",
-        "PersistedHtmlValue": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n  Worker List so nobody is told twice.\n\n  securityenabled:&#39;false&#39; on every entity command. A webhook-launched\n  workflow has no logged-in person and entity commands apply Rock&#39;s entity\n  security, which returns nothing silently. It does not bite these three on\n  our instance, but it DOES bite {% groupmember %}, and another instance may\n  be configured differently.\n\n  Attribute:&#39;Schedules&#39; returns the schedule NAMES - &#39;RawValue&#39; is required.\n  RSVP != 0 keeps Yes, Maybe AND Unknown - do not tighten it.\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:&#39;VolunteerGroup&#39;,&#39;Object&#39; -%}\n{%- assign workerList = Workflow | Attribute:&#39;WorkerList&#39; -%}\n{%- assign offset = Workflow | Attribute:&#39;OffsetMinutes&#39; | AsInteger -%}\n{%- assign scheduleGuids = Workflow | Attribute:&#39;Schedules&#39;,&#39;RawValue&#39; -%}\n{%- assign today = &#39;Now&#39; | Date:&#39;yyyy-MM-dd&#39; -%}\n{%- assign now = &#39;Now&#39; | Date:&#39;yyyy-MM-ddTHH:mm:ss&#39; -%}\n{%- assign tomorrow = today | DateAdd:1,&#39;d&#39; | Date:&#39;yyyy-MM-dd&#39; -%}\n\n{%- assign live = &#39;&#39; -%}\n{%- assign scheduleList = scheduleGuids | Split:&#39;,&#39; -%}\n{%- for entry in scheduleList -%}\n    {%- assign scheduleGuid = entry | Trim -%}\n    \n    {%- if scheduleGuid != &#39;&#39; -%}\n        {% schedule where:&#39;Guid == &quot;{{ scheduleGuid }}&quot;&#39; limit:&#39;1&#39; securityenabled:&#39;false&#39; %}\n            {%- for s in scheduleItems -%}\n                {%- assign startsAt = today | Append:&#39;T&#39; | Append:s.StartTimeOfDay -%}\n                {%- assign back = 0 | Minus:offset -%}\n                {%- assign opens = startsAt | DateAdd:back,&#39;m&#39; | Date:&#39;yyyy-MM-ddTHH:mm:ss&#39; -%}\n                {%- assign closes = startsAt | DateAdd:s.DurationInMinutes,&#39;m&#39; | Date:&#39;yyyy-MM-ddTHH:mm:ss&#39; -%}\n                {%- if now &gt;= opens and now &lt;= closes -%}\n                    {%- assign live = live | Append:s.Id | Append:&#39;,&#39; -%}\n                {%- endif -%}\n            {%- endfor -%}\n        {% endschedule %}\n    {%- endif -%}\n{%- endfor -%}\n\n{%- assign list = &#39;&#39; -%}\n{%- if live != &#39;&#39; and group.Id &gt; 0 -%}\n    {% attendanceoccurrence where:&#39;GroupId == {{ group.Id }} &amp;&amp; OccurrenceDate &gt;= &quot;{{ today }}&quot; &amp;&amp; OccurrenceDate &lt; &quot;{{ tomorrow }}&quot;&#39; limit:&#39;20&#39; securityenabled:&#39;false&#39; %}\n        {%- for o in attendanceoccurrenceItems -%}\n            {%- assign token = o.ScheduleId | Append:&#39;,&#39; -%}\n            {%- if live contains token -%}\n                {% attendance where:&#39;OccurrenceId == {{ o.Id }} &amp;&amp; ScheduledToAttend == true &amp;&amp; RSVP != 0&#39; limit:&#39;100&#39; securityenabled:&#39;false&#39; %}\n                {%- for a in attendanceItems -%}\n                    {%- assign aliasGuid = a.PersonAlias.Person.PrimaryAlias.Guid -%}\n                    {%- unless workerList contains aliasGuid -%}\n                        {%- unless list contains aliasGuid -%}\n                            {%- assign list = list | Append:aliasGuid | Append:&#39;,&#39; -%}\n                        {%- endunless -%}\n                    {%- endunless -%}\n                {%- endfor -%}\n                {% endattendance %}\n            {%- endif -%}\n        {%- endfor -%}\n    {% endattendanceoccurrence %}\n{%- endif -%}\n{{ list }}",
+        "Value": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n  Worker List so nobody is told twice.\n\n  securityenabled:'false' on every entity command. A webhook-launched\n  workflow has no logged-in person and entity commands apply Rock's entity\n  security, which returns nothing silently. \n\n  Attribute:'Schedules' returns the schedule NAMES - 'RawValue' is required.\n  RSVP != 0 keeps Yes, Maybe AND Unknown\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'VolunteerGroup','Object' -%}\n{%- assign workerList = Workflow | Attribute:'WorkerList' -%}\n{%- assign offset = Workflow | Attribute:'OffsetMinutes' | AsInteger -%}\n{%- assign scheduleGuids = Workflow | Attribute:'Schedules','RawValue' -%}\n{%- assign today = 'Now' | Date:'yyyy-MM-dd' -%}\n{%- assign now = 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n{%- assign tomorrow = today | DateAdd:1,'d' | Date:'yyyy-MM-dd' -%}\n\n{%- assign live = '' -%}\n{%- assign scheduleList = scheduleGuids | Split:',' -%}\n{%- for entry in scheduleList -%}\n    {%- assign scheduleGuid = entry | Trim -%}\n    \n    {%- if scheduleGuid != '' -%}\n        {% schedule where:'Guid == \"{{ scheduleGuid }}\"' limit:'1' securityenabled:'false' %}\n            {%- for s in scheduleItems -%}\n                {%- assign startsAt = today | Append:'T' | Append:s.StartTimeOfDay -%}\n                {%- assign back = 0 | Minus:offset -%}\n                {%- assign opens = startsAt | DateAdd:back,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- assign closes = startsAt | DateAdd:s.DurationInMinutes,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- if now >= opens and now <= closes -%}\n                    {%- assign live = live | Append:s.Id | Append:',' -%}\n                {%- endif -%}\n            {%- endfor -%}\n        {% endschedule %}\n    {%- endif -%}\n{%- endfor -%}\n\n{%- assign list = '' -%}\n{%- if live != '' and group.Id > 0 -%}\n    {% attendanceoccurrence where:'GroupId == {{ group.Id }} && OccurrenceDate >= \"{{ today }}\" && OccurrenceDate < \"{{ tomorrow }}\"' limit:'20' securityenabled:'false' %}\n        {%- for o in attendanceoccurrenceItems -%}\n            {%- assign token = o.ScheduleId | Append:',' -%}\n            {%- if live contains token -%}\n                {% attendance where:'OccurrenceId == {{ o.Id }} && ScheduledToAttend == true && RSVP != 0' limit:'100' securityenabled:'false' %}\n                {%- for a in attendanceItems -%}\n                    {%- assign aliasGuid = a.PersonAlias.Person.PrimaryAlias.Guid -%}\n                    {%- unless workerList contains aliasGuid -%}\n                        {%- unless list contains aliasGuid -%}\n                            {%- assign list = list | Append:aliasGuid | Append:',' -%}\n                        {%- endunless -%}\n                    {%- endunless -%}\n                {%- endfor -%}\n                {% endattendance %}\n            {%- endif -%}\n        {%- endfor -%}\n    {% endattendanceoccurrence %}\n{%- endif -%}\n{{ list }}",
+        "PersistedTextValue": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n  Worker List so nobody is told twice.\n\n  securityenabled:'false' on every entity command. A webhook-launched\n  workflow has no logged-in person and entity commands apply Rock's entity\n  security, which returns nothing silently. \n\n  Attribute:'Schedules' returns the schedule NAMES - 'RawValue' is required.\n  RSVP != 0 keeps Yes, Maybe AND Unknown\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:'VolunteerGroup','Object' -%}\n{%- assign workerList = Workflow | Attribute:'WorkerList' -%}\n{%- assign offset = Workflow | Attribute:'OffsetMinutes' | AsInteger -%}\n{%- assign scheduleGuids = Workflow | Attribute:'Schedules','RawValue' -%}\n{%- assign today = 'Now' | Date:'yyyy-MM-dd' -%}\n{%- assign now = 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n{%- assign tomorrow = today | DateAdd:1,'d' | Date:'yyyy-MM-dd' -%}\n\n{%- assign live = '' -%}\n{%- assign scheduleList = scheduleGuids | Split:',' -%}\n{%- for entry in scheduleList -%}\n    {%- assign scheduleGuid = entry | Trim -%}\n    \n    {%- if scheduleGuid != '' -%}\n        {% schedule where:'Guid == \"{{ scheduleGuid }}\"' limit:'1' securityenabled:'false' %}\n            {%- for s in scheduleItems -%}\n                {%- assign startsAt = today | Append:'T' | Append:s.StartTimeOfDay -%}\n                {%- assign back = 0 | Minus:offset -%}\n                {%- assign opens = startsAt | DateAdd:back,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- assign closes = startsAt | DateAdd:s.DurationInMinutes,'m' | Date:'yyyy-MM-ddTHH:mm:ss' -%}\n                {%- if now >= opens and now <= closes -%}\n                    {%- assign live = live | Append:s.Id | Append:',' -%}\n                {%- endif -%}\n            {%- endfor -%}\n        {% endschedule %}\n    {%- endif -%}\n{%- endfor -%}\n\n{%- assign list = '' -%}\n{%- if live != '' and group.Id > 0 -%}\n    {% attendanceoccurrence where:'GroupId == {{ group.Id }} && OccurrenceDate >= \"{{ today }}\" && OccurrenceDate < \"{{ tomorrow }}\"' limit:'20' securityenabled:'false' %}\n        {%- for o in attendanceoccurrenceItems -%}\n            {%- assign token = o.ScheduleId | Append:',' -%}\n            {%- if live contains token -%}\n                {% attendance where:'OccurrenceId == {{ o.Id }} && ScheduledToAttend == true && RSVP != 0' limit:'100' securityenabled:'false' %}\n                {%- for a in attendanceItems -%}\n                    {%- assign aliasGuid = a.PersonAlias.Person.PrimaryAlias.Guid -%}\n                    {%- unless workerList contains aliasGuid -%}\n                        {%- unless list contains aliasGuid -%}\n                            {%- assign list = list | Append:aliasGuid | Append:',' -%}\n                        {%- endunless -%}\n                    {%- endunless -%}\n                {%- endfor -%}\n                {% endattendance %}\n            {%- endif -%}\n        {%- endfor -%}\n    {% endattendanceoccurrence %}\n{%- endif -%}\n{{ list }}",
+        "PersistedHtmlValue": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n  Worker List so nobody is told twice.\n\n  securityenabled:&#39;false&#39; on every entity command. A webhook-launched\n  workflow has no logged-in person and entity commands apply Rock&#39;s entity\n  security, which returns nothing silently. \n\n  Attribute:&#39;Schedules&#39; returns the schedule NAMES - &#39;RawValue&#39; is required.\n  RSVP != 0 keeps Yes, Maybe AND Unknown\n  REQUIRES Enabled Lava Commands: RockEntity\n{%- endcomment -%}\n{%- assign group = Workflow | Attribute:&#39;VolunteerGroup&#39;,&#39;Object&#39; -%}\n{%- assign workerList = Workflow | Attribute:&#39;WorkerList&#39; -%}\n{%- assign offset = Workflow | Attribute:&#39;OffsetMinutes&#39; | AsInteger -%}\n{%- assign scheduleGuids = Workflow | Attribute:&#39;Schedules&#39;,&#39;RawValue&#39; -%}\n{%- assign today = &#39;Now&#39; | Date:&#39;yyyy-MM-dd&#39; -%}\n{%- assign now = &#39;Now&#39; | Date:&#39;yyyy-MM-ddTHH:mm:ss&#39; -%}\n{%- assign tomorrow = today | DateAdd:1,&#39;d&#39; | Date:&#39;yyyy-MM-dd&#39; -%}\n\n{%- assign live = &#39;&#39; -%}\n{%- assign scheduleList = scheduleGuids | Split:&#39;,&#39; -%}\n{%- for entry in scheduleList -%}\n    {%- assign scheduleGuid = entry | Trim -%}\n    \n    {%- if scheduleGuid != &#39;&#39; -%}\n        {% schedule where:&#39;Guid == &quot;{{ scheduleGuid }}&quot;&#39; limit:&#39;1&#39; securityenabled:&#39;false&#39; %}\n            {%- for s in scheduleItems -%}\n                {%- assign startsAt = today | Append:&#39;T&#39; | Append:s.StartTimeOfDay -%}\n                {%- assign back = 0 | Minus:offset -%}\n                {%- assign opens = startsAt | DateAdd:back,&#39;m&#39; | Date:&#39;yyyy-MM-ddTHH:mm:ss&#39; -%}\n                {%- assign closes = startsAt | DateAdd:s.DurationInMinutes,&#39;m&#39; | Date:&#39;yyyy-MM-ddTHH:mm:ss&#39; -%}\n                {%- if now &gt;= opens and now &lt;= closes -%}\n                    {%- assign live = live | Append:s.Id | Append:&#39;,&#39; -%}\n                {%- endif -%}\n            {%- endfor -%}\n        {% endschedule %}\n    {%- endif -%}\n{%- endfor -%}\n\n{%- assign list = &#39;&#39; -%}\n{%- if live != &#39;&#39; and group.Id &gt; 0 -%}\n    {% attendanceoccurrence where:&#39;GroupId == {{ group.Id }} &amp;&amp; OccurrenceDate &gt;= &quot;{{ today }}&quot; &amp;&amp; OccurrenceDate &lt; &quot;{{ tomorrow }}&quot;&#39; limit:&#39;20&#39; securityenabled:&#39;false&#39; %}\n        {%- for o in attendanceoccurrenceItems -%}\n            {%- assign token = o.ScheduleId | Append:&#39;,&#39; -%}\n            {%- if live contains token -%}\n                {% attendance where:&#39;OccurrenceId == {{ o.Id }} &amp;&amp; ScheduledToAttend == true &amp;&amp; RSVP != 0&#39; limit:&#39;100&#39; securityenabled:&#39;false&#39; %}\n                {%- for a in attendanceItems -%}\n                    {%- assign aliasGuid = a.PersonAlias.Person.PrimaryAlias.Guid -%}\n                    {%- unless workerList contains aliasGuid -%}\n                        {%- unless list contains aliasGuid -%}\n                            {%- assign list = list | Append:aliasGuid | Append:&#39;,&#39; -%}\n                        {%- endunless -%}\n                    {%- endunless -%}\n                {%- endfor -%}\n                {% endattendance %}\n            {%- endif -%}\n        {%- endfor -%}\n    {% endattendanceoccurrence %}\n{%- endif -%}\n{{ list }}",
         "PersistedCondensedTextValue": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n ...",
         "PersistedCondensedHtmlValue": "{%- comment -%}\n  Volunteer group members scheduled RIGHT NOW, minus anyone already in the\n ...",
         "IsPersistedValueDirty": false,
@@ -2022,7 +2022,7 @@
         "ValueAsPersonId": null,
         "ValueAsBoolean": null,
         "CreatedDateTime": "2026-09-14T00:57:35.69",
-        "ModifiedDateTime": "2026-09-14T11:52:35.343"
+        "ModifiedDateTime": "2026-09-14T15:33:01.237"
       },
       "Transforms": {},
       "References": [
@@ -3504,14 +3504,14 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "",
-        "PersistedTextValue": "",
-        "PersistedHtmlValue": "",
-        "PersistedCondensedTextValue": "",
-        "PersistedCondensedHtmlValue": "",
+        "Value": "13",
+        "PersistedTextValue": "The Ark App",
+        "PersistedHtmlValue": "The Ark App",
+        "PersistedCondensedTextValue": "The Ark App",
+        "PersistedCondensedHtmlValue": "The Ark App",
         "IsPersistedValueDirty": false,
         "ValueAsDateTime": null,
-        "ValueAsNumeric": 13.0,
+        "ValueAsNumeric": 13.00,
         "ValueAsPersonId": null,
         "ValueAsBoolean": false,
         "CreatedDateTime": "2026-09-14T00:14:44.27",
@@ -3808,11 +3808,11 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "",
-        "PersistedTextValue": "",
-        "PersistedHtmlValue": "",
-        "PersistedCondensedTextValue": "",
-        "PersistedCondensedHtmlValue": "",
+        "Value": "61666912-4a07-4169-85d3-b040c4d2deeb",
+        "PersistedTextValue": "Ark IT Use Only",
+        "PersistedHtmlValue": "Ark IT Use Only",
+        "PersistedCondensedTextValue": "Ark IT Use Only",
+        "PersistedCondensedHtmlValue": "Ark IT Use Only",
         "IsPersistedValueDirty": false,
         "ValueAsDateTime": null,
         "ValueAsNumeric": null,
@@ -4815,18 +4815,18 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "",
-        "PersistedTextValue": "",
-        "PersistedHtmlValue": "",
-        "PersistedCondensedTextValue": "",
-        "PersistedCondensedHtmlValue": "",
+        "Value": "IT Dept",
+        "PersistedTextValue": "Attribute not supported",
+        "PersistedHtmlValue": "Attribute not supported",
+        "PersistedCondensedTextValue": "Attribute not supported",
+        "PersistedCondensedHtmlValue": "Attribute not supported",
         "IsPersistedValueDirty": false,
         "ValueAsDateTime": null,
         "ValueAsNumeric": null,
         "ValueAsPersonId": null,
         "ValueAsBoolean": null,
         "CreatedDateTime": "2026-09-14T00:14:44.36",
-        "ModifiedDateTime": "2026-09-14T11:52:35.483"
+        "ModifiedDateTime": "2026-09-14T15:33:01.26"
       },
       "Transforms": {},
       "References": [
@@ -4929,11 +4929,11 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "",
-        "PersistedTextValue": "",
-        "PersistedHtmlValue": "",
-        "PersistedCondensedTextValue": "",
-        "PersistedCondensedHtmlValue": "",
+        "Value": "no-reply@thearkchurch.com",
+        "PersistedTextValue": "Attribute not supported",
+        "PersistedHtmlValue": "Attribute not supported",
+        "PersistedCondensedTextValue": "Attribute not supported",
+        "PersistedCondensedHtmlValue": "Attribute not supported",
         "IsPersistedValueDirty": false,
         "ValueAsDateTime": null,
         "ValueAsNumeric": null,
@@ -6209,7 +6209,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Recipient",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.493"
+        "ModifiedDateTime": "2026-09-14T15:34:46.227"
       },
       "Transforms": {},
       "References": [
@@ -6269,7 +6269,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Channel",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.5"
+        "ModifiedDateTime": "2026-09-14T15:34:46.233"
       },
       "Transforms": {},
       "References": [
@@ -7108,34 +7108,34 @@
         "EntityTypeQualifierColumn": "WorkflowTypeId",
         "Key": "printer",
         "Name": "Printer",
-        "Description": "The printer address the proxy was trying to reach, e.g. 192.168.1.50. Sent by the proxy. For a test event this is the literal word test.",
+        "Description": "The printer address the proxy was trying to reach, e.g. 192.168.x.x. Sent by the proxy. For a test event this is the literal word test.",
         "Order": 0,
         "IsGridColumn": false,
-        "DefaultValue": null,
-        "DefaultPersistedTextValue": null,
-        "DefaultPersistedHtmlValue": null,
-        "DefaultPersistedCondensedTextValue": null,
-        "DefaultPersistedCondensedHtmlValue": null,
+        "DefaultValue": "",
+        "DefaultPersistedTextValue": "",
+        "DefaultPersistedHtmlValue": "",
+        "DefaultPersistedCondensedTextValue": "",
+        "DefaultPersistedCondensedHtmlValue": "",
         "IsDefaultPersistedValueDirty": false,
         "IsMultiValue": false,
         "IsRequired": false,
-        "IconCssClass": null,
-        "AttributeColor": null,
+        "IconCssClass": "",
+        "AttributeColor": "",
         "AllowSearch": false,
         "IsIndexEnabled": false,
         "IsAnalytic": false,
         "IsAnalyticHistory": false,
         "IsActive": true,
         "EnableHistory": false,
-        "PreHtml": null,
-        "PostHtml": null,
+        "PreHtml": "",
+        "PostHtml": "",
         "IsPublic": false,
         "ShowOnBulk": false,
         "IsSuppressHistoryLogging": false,
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Printer",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.35"
+        "ModifiedDateTime": "2026-09-14T15:34:46.08"
       },
       "Transforms": {},
       "References": [
@@ -7156,6 +7156,120 @@
           "EntityType": "Rock.Model.WorkflowType",
           "Type": 1,
           "Data": "25a39dc7-e40d-4795-8060-16de6f20f548"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "056600f8-99bc-4d5f-847e-da4fb744f0d1",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "allowhtml",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "4cae38f2-7612-4366-9af3-cd56568039c4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "6961aa67-f375-4fa8-92bb-2e5683e5d5ea",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "allowlava",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "4cae38f2-7612-4366-9af3-cd56568039c4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "826c40c8-d11d-4d5c-a371-98da6eb298ea",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "isfirstname",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "4cae38f2-7612-4366-9af3-cd56568039c4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "3a50f6a1-e950-42dc-9856-36798afe7164",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "ispassword",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "4cae38f2-7612-4366-9af3-cd56568039c4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "ab9aab2d-5e5b-41ad-a58b-fb671d37c450",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "maxcharacters",
+        "Value": ""
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "4cae38f2-7612-4366-9af3-cd56568039c4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "5290df5a-cb35-4335-93c2-6b24f6a90088",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "showcountdown",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "4cae38f2-7612-4366-9af3-cd56568039c4"
         }
       ]
     },
@@ -7195,7 +7309,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Event",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.357"
+        "ModifiedDateTime": "2026-09-14T15:34:46.087"
       },
       "Transforms": {},
       "References": [
@@ -7255,7 +7369,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Reason",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.367"
+        "ModifiedDateTime": "2026-09-14T15:34:46.093"
       },
       "Transforms": {},
       "References": [
@@ -7315,7 +7429,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Label Count",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.373"
+        "ModifiedDateTime": "2026-09-14T15:34:46.103"
       },
       "Transforms": {},
       "References": [
@@ -7375,7 +7489,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Elapsed Ms",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.377"
+        "ModifiedDateTime": "2026-09-14T15:34:46.11"
       },
       "Transforms": {},
       "References": [
@@ -7435,7 +7549,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Occurred At",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.387"
+        "ModifiedDateTime": "2026-09-14T15:34:46.113"
       },
       "Transforms": {},
       "References": [
@@ -7495,7 +7609,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Proxy Name",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.39"
+        "ModifiedDateTime": "2026-09-14T15:34:46.12"
       },
       "Transforms": {},
       "References": [
@@ -7555,7 +7669,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Consecutive Failures",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.397"
+        "ModifiedDateTime": "2026-09-14T15:34:46.12"
       },
       "Transforms": {},
       "References": [
@@ -7615,7 +7729,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Printers Failing",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.403"
+        "ModifiedDateTime": "2026-09-14T15:34:46.133"
       },
       "Transforms": {},
       "References": [
@@ -7675,7 +7789,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Raw Body",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.413"
+        "ModifiedDateTime": "2026-09-14T15:34:46.14"
       },
       "Transforms": {},
       "References": [
@@ -7735,7 +7849,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Worker Group (always notified)",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.417"
+        "ModifiedDateTime": "2026-09-14T15:34:46.14"
       },
       "Transforms": {},
       "References": [
@@ -7771,11 +7885,11 @@
         "Description": "Members of this group are notified only while a service they are scheduled for is running. Scheduled and not declined, within the window. May legitimately match nobody, which is not an error. DELIBERATELY EMPTY ON IMPORT.",
         "Order": 11,
         "IsGridColumn": false,
-        "DefaultValue": "6844d32d-f03e-45d0-a666-24feee35c4f5",
-        "DefaultPersistedTextValue": "IT/Check-in Support",
-        "DefaultPersistedHtmlValue": "IT/Check-in Support",
-        "DefaultPersistedCondensedTextValue": "IT/Check-in Support",
-        "DefaultPersistedCondensedHtmlValue": "IT/Check-in Support",
+        "DefaultValue": "",
+        "DefaultPersistedTextValue": "",
+        "DefaultPersistedHtmlValue": "",
+        "DefaultPersistedCondensedTextValue": "",
+        "DefaultPersistedCondensedHtmlValue": "",
         "IsDefaultPersistedValueDirty": false,
         "IsMultiValue": false,
         "IsRequired": false,
@@ -7795,7 +7909,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Volunteer Group (only while scheduled)",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.427"
+        "ModifiedDateTime": "2026-09-14T15:34:46.153"
       },
       "Transforms": {},
       "References": [
@@ -7855,7 +7969,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Schedules",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.43"
+        "ModifiedDateTime": "2026-09-14T15:34:46.157"
       },
       "Transforms": {},
       "References": [
@@ -7888,7 +8002,7 @@
         "EntityTypeQualifierColumn": "WorkflowTypeId",
         "Key": "OffsetMinutes",
         "Name": "Offset Minutes",
-        "Description": "How many minutes before a service starts the volunteers for it become notifiable. The window runs from (start minus this) to (start plus the schedule's duration). Rock's own IsScheduleActive is false during pre-service check-in, and IsCheckInActive uses offsets of 180-420 minutes on this instance, so neither is usable - hence an explicit offset.",
+        "Description": "How many minutes before a service starts the volunteers for it become notifiable. The window runs from (start minus this) to (start plus the schedule's duration). Rock's own IsScheduleActive is false during pre-service check-in.  This allows for a specific offset not based on the schedules offset.",
         "Order": 13,
         "IsGridColumn": false,
         "DefaultValue": "60",
@@ -7899,23 +8013,23 @@
         "IsDefaultPersistedValueDirty": false,
         "IsMultiValue": false,
         "IsRequired": false,
-        "IconCssClass": null,
-        "AttributeColor": null,
+        "IconCssClass": "",
+        "AttributeColor": "",
         "AllowSearch": false,
         "IsIndexEnabled": false,
         "IsAnalytic": false,
         "IsAnalyticHistory": false,
         "IsActive": true,
         "EnableHistory": false,
-        "PreHtml": null,
-        "PostHtml": null,
+        "PreHtml": "",
+        "PostHtml": "",
         "IsPublic": false,
         "ShowOnBulk": false,
         "IsSuppressHistoryLogging": false,
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Offset Minutes",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.44"
+        "ModifiedDateTime": "2026-09-14T15:34:46.17"
       },
       "Transforms": {},
       "References": [
@@ -7948,34 +8062,34 @@
         "EntityTypeQualifierColumn": "WorkflowTypeId",
         "Key": "PrinterName",
         "Name": "Printer Name (resolved)",
-        "Description": "Working value. The friendly name looked up from Device by IP address, e.g. kids-checkin-01. Falls back to the raw address when no device matches.",
+        "Description": "Working value. The friendly name looked up from Device by IP address, e.g. Kids Printer 6. Falls back to the raw address when no device matches.",
         "Order": 14,
         "IsGridColumn": false,
-        "DefaultValue": null,
-        "DefaultPersistedTextValue": null,
-        "DefaultPersistedHtmlValue": null,
-        "DefaultPersistedCondensedTextValue": null,
-        "DefaultPersistedCondensedHtmlValue": null,
+        "DefaultValue": "",
+        "DefaultPersistedTextValue": "",
+        "DefaultPersistedHtmlValue": "",
+        "DefaultPersistedCondensedTextValue": "",
+        "DefaultPersistedCondensedHtmlValue": "",
         "IsDefaultPersistedValueDirty": false,
         "IsMultiValue": false,
         "IsRequired": false,
-        "IconCssClass": null,
-        "AttributeColor": null,
+        "IconCssClass": "",
+        "AttributeColor": "",
         "AllowSearch": false,
         "IsIndexEnabled": false,
         "IsAnalytic": false,
         "IsAnalyticHistory": false,
         "IsActive": true,
         "EnableHistory": false,
-        "PreHtml": null,
-        "PostHtml": null,
+        "PreHtml": "",
+        "PostHtml": "",
         "IsPublic": false,
         "ShowOnBulk": false,
         "IsSuppressHistoryLogging": false,
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Printer Name (resolved)",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.447"
+        "ModifiedDateTime": "2026-09-14T15:34:46.173"
       },
       "Transforms": {},
       "References": [
@@ -7996,6 +8110,120 @@
           "EntityType": "Rock.Model.WorkflowType",
           "Type": 1,
           "Data": "25a39dc7-e40d-4795-8060-16de6f20f548"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "b07e2ecb-571d-470f-b1bd-852201b9bc42",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "allowhtml",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "aa846d70-6870-4f3a-8832-58e599a5aeb4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "0b80609b-8686-4b89-8221-cc9396af0637",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "allowlava",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "aa846d70-6870-4f3a-8832-58e599a5aeb4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "cc08b300-1bb5-4114-8057-c390f02de50f",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "isfirstname",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "aa846d70-6870-4f3a-8832-58e599a5aeb4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "49f2ab64-7d85-491d-ae55-8e18ea727413",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "ispassword",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "aa846d70-6870-4f3a-8832-58e599a5aeb4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "d3ff4f41-bc46-4e5b-8ec2-a7bd190c48c5",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "maxcharacters",
+        "Value": ""
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "aa846d70-6870-4f3a-8832-58e599a5aeb4"
+        }
+      ]
+    },
+    {
+      "EntityType": "Rock.Model.AttributeQualifier",
+      "Guid": "cce3e547-4484-468e-977d-c4beeff85132",
+      "GenerateNewGuid": true,
+      "Properties": {
+        "IsSystem": false,
+        "Key": "showcountdown",
+        "Value": "False"
+      },
+      "Transforms": {},
+      "References": [
+        {
+          "Property": "AttributeId",
+          "EntityType": "Rock.Model.Attribute",
+          "Type": 1,
+          "Data": "aa846d70-6870-4f3a-8832-58e599a5aeb4"
         }
       ]
     },
@@ -8035,7 +8263,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Message Text",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.447"
+        "ModifiedDateTime": "2026-09-14T15:34:46.183"
       },
       "Transforms": {},
       "References": [
@@ -8095,7 +8323,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Worker List",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.463"
+        "ModifiedDateTime": "2026-09-14T15:34:46.193"
       },
       "Transforms": {},
       "References": [
@@ -8155,7 +8383,7 @@
         "AdditionalSettingsJson": null,
         "AbbreviatedName": "Volunteer List",
         "CreatedDateTime": null,
-        "ModifiedDateTime": "2026-09-14T12:15:35.463"
+        "ModifiedDateTime": "2026-09-14T15:34:46.2"
       },
       "Transforms": {},
       "References": [
