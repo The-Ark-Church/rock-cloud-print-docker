@@ -1,5 +1,10 @@
 # Rock setup — print failure notifications
 
+> **⚠️ Release candidate.** The proxy side of this exists only in the
+> `1.4.0-rc*` pre-release images, not in `:latest`. You can import and configure
+> the workflow now, but nothing will reach it until you run a build that can
+> send to it. This notice comes out when the feature ships in a release.
+
 Print failure notifications need a workflow in Rock. This folder has one you can
 import, so you don't have to build it from scratch.
 

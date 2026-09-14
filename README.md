@@ -186,6 +186,18 @@ When a PIN is set this way it cannot be changed through the web UI — the Setti
 
 ## Print failure notifications
 
+> ### ⚠️ Release candidate — not in a released build yet
+>
+> This feature exists only in the `1.4.0-rc*` pre-release images while it is
+> being tested against real printers. **It is not in `:latest`**, so if you are
+> running a released version the settings described below will not be there.
+>
+> Pre-release images are published for testing and are not recommended for
+> everyday use. To try it deliberately, pin an exact tag — for example
+> `asdfinit/rock-cloudprint:1.4.0-rc4` — rather than following `:latest`.
+>
+> This notice comes out when the feature ships in a release.
+
 The proxy can tell your Rock server when a printer fails, so somebody can be
 told about it. It is off by default.
 
