@@ -28,61 +28,17 @@ class ProxyStatus
 
     public int TotalPrinted { get; private set; }
 
-    /// <summary>
-    /// When the server was last heard from. A socket can stay open long after
-    /// the other end has gone - no close frame arrives, so the receive loop
-    /// waits forever - and this is the only evidence that has happened.
-    /// </summary>
-    public DateTimeOffset? LastMessageReceivedDateTime { get; private set; }
-
-    /// <summary>
-    /// How long the connection has been silent, or <c>null</c> when nothing has
-    /// been received yet.
-    /// </summary>
-    public TimeSpan? IdleTime
-    {
-        get
-        {
-            lock ( _lock )
-            {
-                return LastMessageReceivedDateTime.HasValue
-                    ? DateTimeOffset.Now - LastMessageReceivedDateTime.Value
-                    : null;
-            }
-        }
-    }
-
     public void SetConnected( bool connected )
     {
-        lock ( _lock )
+        IsConnected = connected;
+
+        if ( connected )
         {
-            IsConnected = connected;
-
-            if ( connected )
-            {
-                ConnectedDateTime = DateTimeOffset.Now;
-
-                // Treat connecting as activity, so a fresh connection is not
-                // immediately judged idle by the watchdog.
-                LastMessageReceivedDateTime = DateTimeOffset.Now;
-            }
-            else
-            {
-                ConnectedDateTime = null;
-                LastMessageReceivedDateTime = null;
-            }
+            ConnectedDateTime = DateTimeOffset.Now;
         }
-    }
-
-    /// <summary>
-    /// Records that something arrived from the server. Called for every message,
-    /// not just pings, so any traffic counts as proof the link is alive.
-    /// </summary>
-    public void RecordMessageReceived()
-    {
-        lock ( _lock )
+        else
         {
-            LastMessageReceivedDateTime = DateTimeOffset.Now;
+            ConnectedDateTime = null;
         }
     }
 

@@ -64,11 +64,6 @@ class ProxyWorker : BackgroundService
     /// </summary>
     private readonly PrintMetrics _metrics;
 
-    /// <summary>
-    /// Reports print problems back to the Rock server.
-    /// </summary>
-    private readonly FailureNotifier _notifier;
-
     #endregion
 
     /// <summary>
@@ -82,7 +77,6 @@ class ProxyWorker : BackgroundService
         _optionsMonitor = serviceProvider.GetRequiredService<IOptionsMonitor<CloudPrintOptions>>();
         _status = serviceProvider.GetRequiredService<ProxyStatus>();
         _metrics = serviceProvider.GetRequiredService<PrintMetrics>();
-        _notifier = serviceProvider.GetRequiredService<FailureNotifier>();
 
         _optionsMonitor.OnChange( OnConfigurationChanged );
     }
@@ -94,8 +88,6 @@ class ProxyWorker : BackgroundService
         {
             try
             {
-                AbortIfConnectionIsDead();
-
                 await AttemptStartProxyAsync( stoppingToken );
             }
             catch ( TaskCanceledException ) when ( stoppingToken.IsCancellationRequested )
@@ -131,12 +123,7 @@ class ProxyWorker : BackgroundService
         }
 
         var ws = await ConnectAsync( cancellationToken );
-        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds, _notifier, _optionsMonitor.CurrentValue.ConnectionIdleTimeoutSeconds, _optionsMonitor.CurrentValue.PrinterTimeoutSeconds )
-        {
-            SendTimeout = _optionsMonitor.CurrentValue.SendTimeoutSeconds > 0
-                ? TimeSpan.FromSeconds( _optionsMonitor.CurrentValue.SendTimeoutSeconds )
-                : TimeSpan.Zero
-        };
+        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds );
 
         _status.SetConnected( true );
 
@@ -160,56 +147,6 @@ class ProxyWorker : BackgroundService
         finally
         {
             _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Tears down a connection the server has stopped talking to us on.
-    ///
-    /// A socket that is merely dead produces no close frame, so the receive loop
-    /// stays parked on ReceiveAsync, Closed never fires, and the proxy goes on
-    /// reporting itself connected while every print quietly times out at the
-    /// far end. Being handed a socket object is not evidence of a working link;
-    /// having heard from the server recently is.
-    ///
-    /// Abort is deliberate rather than a graceful close: closing writes a frame
-    /// and waits for the reply, which on exactly this kind of connection is what
-    /// hangs. Aborting cancels the pending receive, which raises Closed, which
-    /// lets the normal reconnect path run on the next pass.
-    /// </summary>
-    private void AbortIfConnectionIsDead()
-    {
-        var timeoutSeconds = _optionsMonitor.CurrentValue.ConnectionIdleTimeoutSeconds;
-
-        if ( timeoutSeconds <= 0 )
-        {
-            return;
-        }
-
-        var proxy = _proxy;
-
-        if ( proxy == null )
-        {
-            return;
-        }
-
-        var idle = _status.IdleTime;
-
-        if ( !idle.HasValue || idle.Value <= TimeSpan.FromSeconds( timeoutSeconds ) )
-        {
-            return;
-        }
-
-        _logger.LogWarning( "Nothing received from the server for {seconds:0}s, longer than the {timeout}s limit. The connection looks open but is not carrying traffic, so it is being rebuilt.",
-            idle.Value.TotalSeconds, timeoutSeconds );
-
-        try
-        {
-            proxy.Abort();
-        }
-        catch ( Exception ex )
-        {
-            _logger.LogError( ex, "Failed to abort the stalled connection." );
         }
     }
 
@@ -300,16 +237,6 @@ class ProxyWorker : BackgroundService
             uri = new Uri( uri, $"api/v2/checkin/cloudprint/{options.Id}?name={name}" );
 
             var ws = new ClientWebSocket();
-
-            // Keepalive frames keep idle intermediaries from dropping the
-            // connection, but they cannot detect a dead one on this runtime:
-            // ClientWebSocketOptions.KeepAliveTimeout only exists from .NET 9,
-            // so an unanswered keepalive is never acted on here. That gap is
-            // exactly what AbortIfConnectionIsDead covers.
-            if ( options.KeepAliveSeconds > 0 )
-            {
-                ws.Options.KeepAliveInterval = TimeSpan.FromSeconds( options.KeepAliveSeconds );
-            }
 
             try
             {
