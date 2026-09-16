@@ -269,6 +269,23 @@ repeating itself later.
 - The preview is drawn by [Labelary](https://labelary.com/), so that one button
   needs internet access. Printing does not.
 
+**If the printer has a cutter**, tick **Has cutter** beside the address and the
+proxy sends the cut commands itself — one cut after the last label of each copy.
+It uses the same commands Rock sends during check-in, so the cut no longer
+depends on which uploaded label happens to carry `^MMC`.
+
+**Capturing a label from Rock.** Rock will not give you the ZPL for a label
+designed in its own designer, but the proxy is in the middle of every print.
+**Capture from Rock** catches one by being an ordinary printer: arm it, then
+point a printer address in Rock at this machine and print one label. It listens
+on 9100, only while armed, and stops after one label.
+
+It is for a label designed **as a blank** — a normal check-in label has nothing
+to write on, so blanking one is useless. Expect the security code field to
+arrive **empty**: Rock substitutes its token before printing, and a test print
+has no attendance behind it. Fields are picked by position, and the list shows
+each field's font height, because the code is the one thing printed large.
+
 Templates are stored in `config/labels/`, and the record of used codes in
 `config/blank-labels.json` — both inside the folder you already back up.
 

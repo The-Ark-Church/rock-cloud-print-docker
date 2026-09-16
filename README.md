@@ -485,6 +485,74 @@ paper, not a failure. The only thing that ends a run early is **Cancel**.
 
 One run happens at a time. A second is refused rather than queued.
 
+### Cutting
+
+If the printer has a cutter, tick **Has cutter** beside the printer address and
+the proxy sends the cut commands itself — one cut after the last label of each
+copy, so a child's tag, a parent's receipt and a roster label come off together.
+
+It is a setting for that run, not a saved printer: the proxy has no printer
+records.
+
+This is worth ticking even if your labels already carry `^MMC`, because it means
+the cut no longer depends on which label happens to be last in the order. The
+commands are the same ones Rock sends during check-in — the label's trailing
+`^XZ` becomes `^MMC^XZ` to cut, or `^XB^XZ` to suppress the backfeed and the cut
+with it. They are appended, so a template's own `^MMT` or `^MMC` does not have to
+be removed; ZPL takes the last command it is given.
+
+Leave it unticked and nothing is added, so a label that cuts by itself still
+behaves exactly as it did.
+
+### Capturing a label from Rock
+
+Rock will not hand out the ZPL for a label designed in its own designer. But the
+proxy sits in the middle of every print, so a label Rock prints arrives as raw
+ZPL whatever it was authored as — and **Capture from Rock** catches one by being
+an ordinary printer.
+
+**This is for a label you designed *as a blank*** — with lines to write on and a
+placeholder where the code goes. A normal check-in label will not do. Designed
+labels write text straight into fields and carry nothing to write on, because
+nothing is ever hand-written on them, so blanking one leaves empty space with no
+indication of what goes where.
+
+1. On the **Blank Labels** tab, press **Capture from Rock**, then **Wait for a
+   label**. It listens on port 9100 by default.
+2. In Rock, set a printer's address to this machine and print one label to it. A
+   check-in label's test print does it. No port is needed — an address without
+   one means 9100.
+3. Pick which fields hold the security code, name the label, and save.
+
+**Nothing here needs to be connected to Rock.** Whichever proxy Rock already
+sends that label to is the one that opens the connection, so the address only has
+to be reachable *from that proxy* — it is an ordinary printer address as far as
+it is concerned. It can be a different machine entirely. If the proxy you are
+capturing with is itself the one Rock routes to, use `127.0.0.1:9100` and nothing
+crosses a network at all.
+
+It listens only while armed and stops after one label, so arming it and
+forgetting cannot quietly record a real child's label during a service. A
+connection that sends nothing — a reachability check, a port scan, the proxy's
+own printer test — is ignored and it keeps waiting.
+
+#### The security code field is usually empty
+
+Expect this, because it looks like something has gone wrong and has not.
+
+Rock's stored ZPL uses a token such as `WWW` where the security code goes, but by
+the time a label is *printed* Rock has already substituted it. A test print has
+no attendance behind it, so it substitutes to **nothing** — and the code field
+arrives empty.
+
+That is why fields are chosen by position rather than by text, and why the list
+shows the height of each field's font. The security code is the one thing on a
+check-in label printed large, so on a real label it stands out from the captions
+by a factor of three or four. The tallest fields are ticked for you.
+
+Pick more than one where the label needs it — a receipt torn in half carries the
+code on both halves.
+
 ### Preview
 
 The preview is drawn by [Labelary](https://labelary.com/), the same service
