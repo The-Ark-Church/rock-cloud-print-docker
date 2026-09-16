@@ -65,6 +65,11 @@ class ProxyWorker : BackgroundService
     private readonly PrintMetrics _metrics;
 
     /// <summary>
+    /// Reports print problems to the Rock server.
+    /// </summary>
+    private readonly FailureNotifier _notifier;
+
+    /// <summary>
     /// The socket behind <see cref="_proxy"/>. Held only so that when the
     /// connection ends we can say why: <see cref="ProxyWebSocket"/> swallows the
     /// exception that ended its receive loop into <c>Debug.WriteLine</c>, which
@@ -99,6 +104,7 @@ class ProxyWorker : BackgroundService
         _optionsMonitor = serviceProvider.GetRequiredService<IOptionsMonitor<CloudPrintOptions>>();
         _status = serviceProvider.GetRequiredService<ProxyStatus>();
         _metrics = serviceProvider.GetRequiredService<PrintMetrics>();
+        _notifier = serviceProvider.GetRequiredService<FailureNotifier>();
 
         _optionsMonitor.OnChange( OnConfigurationChanged );
     }
@@ -146,7 +152,7 @@ class ProxyWorker : BackgroundService
 
         var ws = await ConnectAsync( cancellationToken );
         var options = _optionsMonitor.CurrentValue;
-        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, options.SlowPrintMilliseconds );
+        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, options.SlowPrintMilliseconds, _notifier );
 
         _socket = ws;
         _stopRequested = false;
@@ -332,6 +338,10 @@ class ProxyWorker : BackgroundService
     /// <param name="options">The new printer options.</param>
     private void OnConfigurationChanged( CloudPrintOptions options )
     {
+        // Every settings write lands here, including ones the connection does not
+        // care about - the notification fields, the PIN. Rebuilding the socket for
+        // those meant saving the settings form dropped printing for a moment each
+        // time, which on a Sunday morning is a real cost for no benefit.
         if ( _proxy == null )
         {
             // Nothing to restart. The reconnect loop is already running and will
@@ -341,9 +351,6 @@ class ProxyWorker : BackgroundService
             return;
         }
 
-        // Every settings write lands here, including ones the connection does not
-        // care about. Rebuilding the socket for those meant saving the settings
-        // form dropped printing for a moment each time, for no benefit.
         if ( options.Url == _connectedUrl
             && options.Id == _connectedId
             && options.Name == _connectedName )

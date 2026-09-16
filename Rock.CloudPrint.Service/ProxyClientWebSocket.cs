@@ -50,6 +50,11 @@ class ProxyClientWebSocket : ProxyWebSocket
     private readonly int _slowPrintMilliseconds;
 
     /// <summary>
+    /// Reports print problems to the Rock server. Never blocks the print path.
+    /// </summary>
+    private readonly FailureNotifier _notifier;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProxyClientWebSocket"/> class.
     /// </summary>
     /// <param name="socket">The <see cref="WebSocket"/> used for communication.</param>
@@ -57,13 +62,15 @@ class ProxyClientWebSocket : ProxyWebSocket
     /// <param name="status">The shared proxy status instance.</param>
     /// <param name="metrics">Records the outcome of each print attempt.</param>
     /// <param name="slowPrintMilliseconds">The point past which Rock is assumed to have stopped waiting.</param>
-    public ProxyClientWebSocket( WebSocket socket, ILogger logger, ProxyStatus status, PrintMetrics metrics, int slowPrintMilliseconds )
+    /// <param name="notifier">Reports print problems to the Rock server.</param>
+    public ProxyClientWebSocket( WebSocket socket, ILogger logger, ProxyStatus status, PrintMetrics metrics, int slowPrintMilliseconds, FailureNotifier notifier )
         : base( socket )
     {
         _logger = logger;
         _status = status;
         _metrics = metrics;
         _slowPrintMilliseconds = slowPrintMilliseconds;
+        _notifier = notifier;
     }
 
     /// <inheritdoc/>
@@ -98,9 +105,10 @@ class ProxyClientWebSocket : ProxyWebSocket
             {
                 // In a finally because that response write throws when the server
                 // has already aborted the connection - which is exactly when this
-                // attempt most needs recording. Without it such a print was
-                // counted neither as failed nor as slow, so the label total and
-                // the failure total silently disagreed.
+                // attempt most needs recording and reporting. Without it such a
+                // print was counted neither as failed nor as slow, the label
+                // total disagreed with the failure total, and no notification
+                // was sent for the very case most worth hearing about.
                 RecordPrintResult( printMessage.Address, labelCount, printResult, elapsed );
             }
         }
@@ -125,6 +133,12 @@ class ProxyClientWebSocket : ProxyWebSocket
                 reason: printResult,
                 elapsed: elapsed,
                 slowThresholdMilliseconds: _slowPrintMilliseconds );
+
+            // Decides for itself whether this is worth reporting, and dispatches
+            // to a background task. Never awaited: the print path is inline on
+            // the receive loop, so anything slow here stops the proxy answering
+            // the server at all.
+            _notifier.OnPrintResult( printEvent, labelCount );
         }
         catch ( Exception ex )
         {
