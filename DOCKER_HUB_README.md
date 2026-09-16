@@ -221,7 +221,7 @@ Settings are stored in the `config/` directory outside the container and are una
 | Dashboard | Connection status, uptime, labels printed counter |
 | Logs | Live service log (last 300 entries), color-coded by level |
 | Printers | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
-| Blank Labels | Store ZPL templates and print stacks of pre-coded blank check-in labels. Works with Rock unreachable — see below |
+| Blank Labels | Store ZPL templates and print pre-coded blank check-in labels. Works with Rock unreachable — see below |
 | Settings → Connection | Rock server URL, Proxy ID, Proxy Name |
 | Settings → Notifications | Tell Rock when a printer fails. Needs Rock-side setup first — see below |
 | Settings → Security | Set, change, or remove web UI PIN |
@@ -231,14 +231,14 @@ Settings are stored in the `config/` directory outside the container and are una
 ## Blank labels
 
 When check-in goes down, families fill in labels by hand — which only works if a
-stack of pre-printed blanks already exists. Each blank carries a **security
+supply of pre-printed blanks already exists. Each blank carries a **security
 code**, the same one on the child's tag and the parent's receipt, so pickup
 still matches when the names are handwritten.
 
-The **Blank Labels** tab prints that stack. **It needs nothing from the Rock
+The **Blank Labels** tab prints them. **It needs nothing from the Rock
 server, and that is the point** — the proxy already holds the templates and
-already talks to the printers, so it still works when Rock does not. Print the
-stack in advance, not during the outage.
+already talks to the printers, so it still works when Rock does not. Print them in
+advance, not during the outage.
 
 Three demo templates are included, so there is something to print on a fresh
 install. They can be deleted, and downloaded again from the repository.
@@ -250,7 +250,7 @@ Put anything in cutter mode (`^MMC`) last in the order, or the cut lands in the
 middle of a copy.
 
 **Codes** are random from an alphabet with no `0`, `O`, `1` or `I`, or
-sequential. Sequential numbering is remembered between runs, so two stacks
+sequential. Sequential numbering is remembered between runs, so two batches
 printed months apart cannot carry the same codes. Codes are reserved before
 anything is sent, so a failed run leaves a gap in the numbering rather than
 repeating itself later.

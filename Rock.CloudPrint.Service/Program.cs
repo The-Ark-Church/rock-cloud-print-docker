@@ -48,6 +48,12 @@ public class Program
     /// </summary>
     private const int MaxLabelUploadCharacters = ( LabelStore.MaxContentBytes / 3 + 1 ) * 4 + 1024;
 
+    /// <summary>
+    /// How many labels one preview may draw. Each is a separate call to the
+    /// rendering service, and a copy is two or three labels.
+    /// </summary>
+    private const int MaxLabelsPerPreview = 8;
+
     public static void Main( string[] args )
     {
         var builder = WebApplication.CreateBuilder( args );
@@ -587,50 +593,109 @@ public class Program
                 : Results.Json( new { error = $"There is no label called '{name}'." }, statusCode: 404 );
         } );
 
-        // Renders a label as a picture, so somebody can see whether the code
-        // fits before printing a stack of them.
+        // Renders the ticked labels as pictures, so somebody can see what will
+        // come out before printing a stack of it.
         //
-        // The PNG comes back as base64 rather than as an image response, and
-        // the page shows it with a data: URL. Two reasons, both of which bite
-        // silently: an <img src> cannot carry the bearer token this API
-        // requires, and the content security policy allows images only from
-        // this service and from data: - so a blob: URL would fail to render
-        // with nothing in the console to say why.
-        app.MapPost( "/api/labels/preview", async ( LabelPreviewRequest request, LabelStore labels, LabelPreview preview, CancellationToken cancellationToken ) =>
+        // Every label is drawn with the SAME code, because that is what a copy
+        // is - the child's tag and the parent's receipt carry one code between
+        // them. Showing them with different codes would misrepresent the thing
+        // being previewed.
+        //
+        // The code is a real one from the chosen mode: an actual random code,
+        // or the actual next sequential code. It used to be a row of X, on the
+        // reasoning that X is the widest character and so the safest test of
+        // whether a code fits. That reasoning was sound and the result was
+        // still wrong - asking for random codes and being shown XXX tells you
+        // nothing about what will be on the labels.
+        //
+        // The PNGs come back as base64 for data: URLs. An img tag cannot carry
+        // the bearer token this API requires, and the content security policy
+        // allows images only from this origin and from data:, so a blob: URL
+        // would fail to render with nothing in the console to say why.
+        app.MapPost( "/api/labels/preview", async ( LabelPreviewRequest request, LabelStore labels, LabelPreview preview, BlankLabelStateStore state, CancellationToken cancellationToken ) =>
         {
-            var name = ( request.Name ?? string.Empty ).Trim();
+            var names = ( request.Names ?? Array.Empty<string>() )
+                .Select( n => ( n ?? string.Empty ).Trim() )
+                .Where( n => n.Length > 0 )
+                .ToArray();
 
-            if ( !LabelStore.IsValidName( name ) )
-                return Results.Json( new { error = "That is not a label name." }, statusCode: 400 );
+            if ( names.Length == 0 )
+                return Results.Json( new { error = "Choose at least one label to preview." }, statusCode: 400 );
 
-            var template = labels.Read( name );
-
-            if ( template == null )
-                return Results.Json( new { error = $"There is no label called '{name}'." }, statusCode: 404 );
+            // Each label is one call to the rendering service, so this bounds
+            // how many a single request can make. A copy is two or three.
+            if ( names.Length > MaxLabelsPerPreview )
+                return Results.Json( new { error = $"Preview shows up to {MaxLabelsPerPreview} labels at a time." }, statusCode: 400 );
 
             var prefix = ( request.Prefix ?? string.Empty ).Trim();
 
             if ( !SecurityCode.IsUsablePrefix( prefix ) )
                 return Results.Json( new { error = "A prefix can be letters, digits, dashes and underscores." }, statusCode: 400 );
 
-            var code = prefix + LabelPreview.SampleCode( request.CodeLength ?? SecurityCode.DefaultLength );
-            var result = await preview.RenderAsync( template, code, cancellationToken );
+            var templates = new List<(string Name, byte[] Content)>( names.Length );
 
-            if ( !result.Ok )
+            foreach ( var name in names )
             {
-                // A bad gateway rather than a server error: the proxy is fine,
-                // the thing it asked is not. Printing is unaffected.
-                return Results.Json( new { error = result.Error }, statusCode: 502 );
+                if ( !LabelStore.IsValidName( name ) )
+                    return Results.Json( new { error = "That is not a label name." }, statusCode: 400 );
+
+                var template = labels.Read( name );
+
+                if ( template == null )
+                    return Results.Json( new { error = $"There is no label called '{name}'." }, statusCode: 404 );
+
+                templates.Add( (name, template) );
             }
 
-            return Results.Ok( new
+            string code;
+
+            if ( string.Equals( request.Mode, "sequential", StringComparison.OrdinalIgnoreCase ) )
             {
-                png = Convert.ToBase64String( result.Png! ),
-                code,
-                widthDots = result.WidthDots,
-                lengthDots = result.LengthDots,
-                dpi = LabelPreview.Dpi
-            } );
+                // The code the next run would actually start with.
+                var start = !string.IsNullOrWhiteSpace( request.Start )
+                    ? request.Start.Trim()
+                    : state.Current.SequentialNext;
+
+                if ( !SecurityCode.IsUsableStart( start ) )
+                    start = "0001";
+
+                code = SecurityCode.Sequential( start!, 1, prefix )[0];
+            }
+            else
+            {
+                var length = request.CodeLength ?? SecurityCode.DefaultLength;
+
+                if ( length < 1 || length > SecurityCode.MaxLength )
+                    return Results.Json( new { error = $"A security code is between 1 and {SecurityCode.MaxLength} characters." }, statusCode: 400 );
+
+                code = SecurityCode.Random( length, 1, prefix )[0];
+            }
+
+            var rendered = new List<object>( templates.Count );
+
+            foreach ( var (name, template) in templates )
+            {
+                // One at a time rather than together, to stay well inside the
+                // rendering service's published rate.
+                var result = await preview.RenderAsync( template, code, cancellationToken );
+
+                if ( !result.Ok )
+                {
+                    // A bad gateway rather than a server error: the proxy is
+                    // fine, the thing it asked is not. Printing is unaffected.
+                    return Results.Json( new { error = result.Error }, statusCode: 502 );
+                }
+
+                rendered.Add( new
+                {
+                    name,
+                    png = Convert.ToBase64String( result.Png! ),
+                    widthDots = result.WidthDots,
+                    lengthDots = result.LengthDots
+                } );
+            }
+
+            return Results.Ok( new { code, dpi = LabelPreview.Dpi, labels = rendered } );
         } ).RequireRateLimiting( "labelary" );
 
         // Starts a run and answers immediately with its id. The run is not tied
@@ -798,10 +863,11 @@ internal record LabelUploadRequest( string? Name, string? ContentBase64 );
 /// three labels ticked prints 1,500 labels.
 /// </summary>
 /// <summary>
-/// A request to draw a label. The code is made up from the length rather than
-/// supplied, so a preview cannot be used to render arbitrary text.
+/// A request to draw one copy's worth of labels. The code is generated from the
+/// mode rather than supplied, so a preview cannot be used to render arbitrary
+/// text onto a label.
 /// </summary>
-internal record LabelPreviewRequest( string? Name, int? CodeLength, string? Prefix );
+internal record LabelPreviewRequest( string[]? Names, string? Mode, int? CodeLength, string? Start, string? Prefix );
 
 internal record BlankPrintRequest(
     string? Address,

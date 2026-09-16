@@ -370,18 +370,18 @@ printer, so a genuine second outage is reported even if it follows closely.
 ## Blank labels
 
 When check-in goes down, families fill in labels by hand. That only works if a
-stack of pre-printed blanks already exists, and each blank has to carry a
+supply of pre-printed blanks already exists, and each blank has to carry a
 **security code** — the same code on the child's tag and on the parent's
 receipt, so pickup still matches when the names are handwritten.
 
-This prints that stack.
+This prints them.
 
 **It needs nothing from Rock, and that is the entire point.** The proxy already
 holds the templates and already talks to the printers, so it can print blanks
 when the Rock server is unreachable — which is the situation blanks exist for.
 Print them well in advance, not during the outage.
 
-### Printing a stack
+### Printing labels
 
 1. Open the **Blank Labels** tab.
 2. Tick the labels that make up one copy, and use the arrows to put them in the
@@ -391,7 +391,7 @@ Print them well in advance, not during the outage.
 4. Choose how many **copies** and whether codes are random or sequential.
 5. Press **Preview** to see the label, or **Print one test copy** to check the
    printer and the stock.
-6. Press **Print the stack**.
+6. Press **Print labels**.
 
 Three demo templates are included, so there is something to print on a fresh
 install.
@@ -439,7 +439,7 @@ them, because somebody reads the code off a label and says it out loud at a
 pickup desk. They are deduplicated within a run.
 
 **Sequential** codes count up from a number you give, and **the proxy remembers
-where it got to**, so the stack printed in March and the stack printed in June
+where it got to**, so labels printed in March and labels printed in June
 cannot carry the same numbers. Leave the start blank to carry on from where the
 last run finished.
 
@@ -456,7 +456,7 @@ practice: the parent is holding the matching half and the handwritten names
 differ, so a volunteer sees the mismatch.
 
 A security code is printed large enough to read at a glance, so more than five
-or six characters rarely fits. Use the preview to check before printing a stack.
+or six characters rarely fits. Use the preview to check before printing a run.
 
 ### "Handed to the printer" is not "printed"
 
@@ -464,7 +464,7 @@ The run panel counts copies **handed to the printer**, and the wording is
 deliberate. A completed network write only means the operating system accepted
 the bytes — measured on a development machine, close to a megabyte can still be
 sitting in buffers after a printer has stopped reading. So the count is what
-this end handed over, which is all it can honestly claim. Look at the stack.
+this end handed over, which is all it can honestly claim. Look at the labels.
 
 **There is no time limit on a run, by design.** A printer that runs out of
 labels pauses and carries on when it is reloaded, even if nobody is there when
@@ -501,7 +501,7 @@ Both are inside `config`, so whatever backs that up already covers them.
 | **Dashboard** | Connection status (green/amber/grey), start time, time connected, labels requested since start, and a Print Results panel: labels printed, labels failed, prints that finished too slowly, and the reason for the most recent failure |
 | **Logs** | Live service log stream, color-coded by level |
 | **Printers** | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
-| **Blank Labels** | Store ZPL templates and print stacks of pre-coded blank check-in labels. Works with Rock unreachable — see above |
+| **Blank Labels** | Store ZPL templates and print pre-coded blank check-in labels. Works with Rock unreachable — see above |
 | **Settings → Failure Notifications** | Tell Rock when a printer fails. Requires Rock-side setup first — see above |
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
 | **Settings → Security** | Set, change, or remove the web UI PIN |
