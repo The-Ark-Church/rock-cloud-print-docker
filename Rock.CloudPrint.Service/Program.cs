@@ -67,6 +67,9 @@ public class Program
         builder.Services.AddSingleton<LabelStore>();
         builder.Services.AddSingleton<BlankLabelStateStore>();
         builder.Services.AddSingleton<BlankLabelRunner>();
+
+        builder.Services.AddHttpClient( "labelary" );
+        builder.Services.AddSingleton<LabelPreview>();
         builder.Services.AddSingleton<AuthService>();
 
         // Redirects are NOT followed: a URL matching no webhook in Rock redirects
@@ -107,6 +110,18 @@ public class Program
             {
                 o.PermitLimit = 10;
                 o.Window = TimeSpan.FromMinutes( 1 );
+                o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                o.QueueLimit = 0;
+            } );
+
+            // The preview endpoint calls a third-party service on every press.
+            // Labelary publishes a free-tier rate for exactly this, and staying
+            // under it is good manners rather than a security measure - the
+            // caller is already past the PIN.
+            options.AddFixedWindowLimiter( "labelary", o =>
+            {
+                o.PermitLimit = 3;
+                o.Window = TimeSpan.FromSeconds( 1 );
                 o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 o.QueueLimit = 0;
             } );
@@ -572,6 +587,52 @@ public class Program
                 : Results.Json( new { error = $"There is no label called '{name}'." }, statusCode: 404 );
         } );
 
+        // Renders a label as a picture, so somebody can see whether the code
+        // fits before printing a stack of them.
+        //
+        // The PNG comes back as base64 rather than as an image response, and
+        // the page shows it with a data: URL. Two reasons, both of which bite
+        // silently: an <img src> cannot carry the bearer token this API
+        // requires, and the content security policy allows images only from
+        // this service and from data: - so a blob: URL would fail to render
+        // with nothing in the console to say why.
+        app.MapPost( "/api/labels/preview", async ( LabelPreviewRequest request, LabelStore labels, LabelPreview preview, CancellationToken cancellationToken ) =>
+        {
+            var name = ( request.Name ?? string.Empty ).Trim();
+
+            if ( !LabelStore.IsValidName( name ) )
+                return Results.Json( new { error = "That is not a label name." }, statusCode: 400 );
+
+            var template = labels.Read( name );
+
+            if ( template == null )
+                return Results.Json( new { error = $"There is no label called '{name}'." }, statusCode: 404 );
+
+            var prefix = ( request.Prefix ?? string.Empty ).Trim();
+
+            if ( !SecurityCode.IsUsablePrefix( prefix ) )
+                return Results.Json( new { error = "A prefix can be letters, digits, dashes and underscores." }, statusCode: 400 );
+
+            var code = prefix + LabelPreview.SampleCode( request.CodeLength ?? SecurityCode.DefaultLength );
+            var result = await preview.RenderAsync( template, code, cancellationToken );
+
+            if ( !result.Ok )
+            {
+                // A bad gateway rather than a server error: the proxy is fine,
+                // the thing it asked is not. Printing is unaffected.
+                return Results.Json( new { error = result.Error }, statusCode: 502 );
+            }
+
+            return Results.Ok( new
+            {
+                png = Convert.ToBase64String( result.Png! ),
+                code,
+                widthDots = result.WidthDots,
+                lengthDots = result.LengthDots,
+                dpi = LabelPreview.Dpi
+            } );
+        } ).RequireRateLimiting( "labelary" );
+
         // Starts a run and answers immediately with its id. The run is not tied
         // to this request: a stack of a thousand takes a while, and a closed
         // tab must not cancel it half way through and lose the record of which
@@ -736,6 +797,12 @@ internal record LabelUploadRequest( string? Name, string? ContentBase64 );
 /// <c>Quantity</c> is always a number of copies, never of labels: 500 with
 /// three labels ticked prints 1,500 labels.
 /// </summary>
+/// <summary>
+/// A request to draw a label. The code is made up from the length rather than
+/// supplied, so a preview cannot be used to render arbitrary text.
+/// </summary>
+internal record LabelPreviewRequest( string? Name, int? CodeLength, string? Prefix );
+
 internal record BlankPrintRequest(
     string? Address,
     string[]? Labels,

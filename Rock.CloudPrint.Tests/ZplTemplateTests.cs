@@ -79,6 +79,34 @@ public class ZplTemplateTests
     }
 
     [Fact]
+    public void LastFormat_TakesTheLabelAndNotThePreambleBeforeIt()
+    {
+        // The supplied templates open with a short configuration format and
+        // then the label. "The label" is the last one.
+        var template = Zpl( "CT~~CD,~CC^~CT~\r\n^XA~TA000^LT0^XZ\r\n^XA\r\n^MMT^FD???^FS^XZ" );
+
+        Assert.Equal( Zpl( "^XA\r\n^MMT^FD???^FS^XZ" ), ZplTemplate.LastFormat( template ) );
+    }
+
+    [Fact]
+    public void LastFormat_ReturnsASingleFormatWhole()
+    {
+        var template = Zpl( "^XA^FD???^FS^XZ" );
+
+        Assert.Equal( template, ZplTemplate.LastFormat( template ) );
+    }
+
+    [Theory]
+    [InlineData( "^XA^FD???^FS" )]
+    [InlineData( "not zpl at all" )]
+    public void LastFormat_GivesUpAndReturnsEverythingWhenThereIsNoCompleteFormat( string content )
+    {
+        // Nothing sensible to trim to, and handing the renderer the whole file
+        // gets a better error out of it than handing it nothing.
+        Assert.Equal( Zpl( content ), ZplTemplate.LastFormat( Zpl( content ) ) );
+    }
+
+    [Fact]
     public void ByteEncoding_RoundTripsEveryByteValue()
     {
         // The whole substitution approach rests on this. A template can carry

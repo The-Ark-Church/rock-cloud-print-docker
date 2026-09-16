@@ -27,6 +27,7 @@ new_files=(
     Rock.CloudPrint.Service/AtomicFile.cs
     Rock.CloudPrint.Service/BlankLabelRunner.cs
     Rock.CloudPrint.Service/BlankLabelState.cs
+    Rock.CloudPrint.Service/LabelPreview.cs
     Rock.CloudPrint.Service/LabelStore.cs
     Rock.CloudPrint.Service/PrinterSocket.cs
     Rock.CloudPrint.Service/SecurityCode.cs

@@ -147,6 +147,44 @@ internal static class ZplTemplate
     }
 
     /// <summary>
+    /// The last <c>^XA…^XZ</c> format in the template, or the whole thing if
+    /// there is not a complete one.
+    ///
+    /// <para>
+    /// A ZPL file often opens with a short configuration format before the
+    /// label itself - all three supplied templates do - so "the label" is the
+    /// last one, not the first. Only the preview uses this. What is sent to a
+    /// printer is always the whole template, byte for byte, because those
+    /// opening formats are setting the printer up.
+    /// </para>
+    /// </summary>
+    public static byte[] LastFormat( byte[] content )
+    {
+        var text = ByteEncoding.GetString( content );
+        var end = text.LastIndexOf( "^XZ", StringComparison.Ordinal );
+
+        if ( end < 0 )
+        {
+            return content;
+        }
+
+        end += 3;
+
+        var start = text.LastIndexOf( "^XA", end - 3, StringComparison.Ordinal );
+
+        if ( start < 0 )
+        {
+            return content;
+        }
+
+        var format = new byte[end - start];
+
+        Array.Copy( content, start, format, 0, format.Length );
+
+        return format;
+    }
+
+    /// <summary>
     /// Locates every <c>^FD…^FS</c> block - the parts of a label that carry
     /// data rather than layout. Substitution happens only inside these, so
     /// nothing else in the template can be altered by accident.
