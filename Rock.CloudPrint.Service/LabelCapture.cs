@@ -300,6 +300,19 @@ internal sealed class LabelCapture : IDisposable
                 buffer.Write( chunk, 0, read );
             }
 
+            if ( buffer.Length == 0 )
+            {
+                // Somebody opened the port and sent nothing: a reachability
+                // check, a port scan, a monitoring probe. That is not a label,
+                // and letting it end the capture would mean whoever armed it
+                // waits for a print that can no longer be caught. Keep waiting.
+                _logger.LogInformation( "A connection from {from} sent nothing, so it was not a label. Still waiting.", from );
+
+                _ = Task.Run( () => AcceptOneAsync( listener, cancellationToken ) );
+
+                return;
+            }
+
             lock ( _gate )
             {
                 StopListening();
