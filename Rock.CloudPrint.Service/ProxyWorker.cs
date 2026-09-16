@@ -64,6 +64,33 @@ class ProxyWorker : BackgroundService
     /// </summary>
     private readonly PrintMetrics _metrics;
 
+    /// <summary>
+    /// Reports print problems to the Rock server.
+    /// </summary>
+    private readonly FailureNotifier _notifier;
+
+    /// <summary>
+    /// The socket behind <see cref="_proxy"/>. Held only so that when the
+    /// connection ends we can say why: <see cref="ProxyWebSocket"/> swallows the
+    /// exception that ended its receive loop into <c>Debug.WriteLine</c>, which
+    /// is compiled out of a Release build.
+    /// </summary>
+    private ClientWebSocket? _socket;
+
+    /// <summary>
+    /// Whether the close now in progress is one we asked for, so a deliberate
+    /// restart is not reported as the server dropping us.
+    /// </summary>
+    private bool _stopRequested;
+
+    /// <summary>
+    /// The settings the live connection was actually built from, so a settings
+    /// write that changes none of them does not rebuild it.
+    /// </summary>
+    private string _connectedUrl = string.Empty;
+    private string _connectedId = string.Empty;
+    private string _connectedName = string.Empty;
+
     #endregion
 
     /// <summary>
@@ -77,6 +104,7 @@ class ProxyWorker : BackgroundService
         _optionsMonitor = serviceProvider.GetRequiredService<IOptionsMonitor<CloudPrintOptions>>();
         _status = serviceProvider.GetRequiredService<ProxyStatus>();
         _metrics = serviceProvider.GetRequiredService<PrintMetrics>();
+        _notifier = serviceProvider.GetRequiredService<FailureNotifier>();
 
         _optionsMonitor.OnChange( OnConfigurationChanged );
     }
@@ -123,7 +151,14 @@ class ProxyWorker : BackgroundService
         }
 
         var ws = await ConnectAsync( cancellationToken );
-        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, _optionsMonitor.CurrentValue.SlowPrintMilliseconds );
+        var options = _optionsMonitor.CurrentValue;
+        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, options.SlowPrintMilliseconds, _notifier );
+
+        _socket = ws;
+        _stopRequested = false;
+        _connectedUrl = options.Url;
+        _connectedId = options.Id;
+        _connectedName = options.Name;
 
         _status.SetConnected( true );
 
@@ -163,6 +198,8 @@ class ProxyWorker : BackgroundService
         {
             if ( _proxy != null )
             {
+                _stopRequested = true;
+
                 await _proxy.CloseAsync( cancellationToken );
             }
         }
@@ -278,9 +315,11 @@ class ProxyWorker : BackgroundService
                 {
                     if ( proxy == _proxy )
                     {
-                        _logger.LogInformation( "Disconnected from server." );
+                        LogDisconnection();
+
                         proxy.Closed -= Proxy_Closed;
                         _proxy = null;
+                        _socket = null;
 
                         _status.SetConnected( false );
                     }
@@ -299,8 +338,56 @@ class ProxyWorker : BackgroundService
     /// <param name="options">The new printer options.</param>
     private void OnConfigurationChanged( CloudPrintOptions options )
     {
-        _logger.LogInformation( "Configuration changed, restarting proxy." );
+        // Every settings write lands here, including ones the connection does not
+        // care about - the notification fields, the PIN. Rebuilding the socket for
+        // those meant saving the settings form dropped printing for a moment each
+        // time, which on a Sunday morning is a real cost for no benefit.
+        if ( _proxy == null )
+        {
+            // Nothing to restart. The reconnect loop is already running and will
+            // pick the new settings up on its next attempt.
+            _logger.LogInformation( "Configuration changed while not connected. The next connection attempt will use the new settings." );
+
+            return;
+        }
+
+        if ( options.Url == _connectedUrl
+            && options.Id == _connectedId
+            && options.Name == _connectedName )
+        {
+            _logger.LogInformation( "Configuration changed, but nothing the server connection depends on." );
+
+            return;
+        }
+
+        _logger.LogInformation( "Connection settings changed, restarting proxy." );
 
         Task.Run( () => AttemptStopProxyAsync() );
+    }
+
+    /// <summary>
+    /// Says why the connection ended. The socket carries the close status even
+    /// though <see cref="ProxyWebSocket"/> discards the exception, so this is the
+    /// only place the reason is available without changing upstream code.
+    /// </summary>
+    private void LogDisconnection()
+    {
+        var socket = _socket;
+        var state = socket?.State.ToString() ?? "unknown";
+
+        if ( _stopRequested )
+        {
+            _logger.LogInformation( "Disconnected from server at our own request. Socket state {state}.", state );
+
+            return;
+        }
+
+        var closeStatus = socket?.CloseStatus?.ToString() ?? "none";
+        var closeDescription = socket?.CloseStatusDescription;
+
+        _logger.LogWarning( "Disconnected from server. Socket state {state}, close status {closeStatus}{closeDescription}",
+            state,
+            closeStatus,
+            string.IsNullOrWhiteSpace( closeDescription ) ? string.Empty : $" '{closeDescription}'" );
     }
 }

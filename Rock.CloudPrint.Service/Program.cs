@@ -38,6 +38,9 @@ public class Program
     /// </summary>
     private const int MaxPrinterAddressLength = 100;
 
+    /// <summary>Longest string accepted as a notification webhook URL.</summary>
+    private const int MaxNotificationUrlLength = 500;
+
     public static void Main( string[] args )
     {
         var builder = WebApplication.CreateBuilder( args );
@@ -48,11 +51,26 @@ public class Program
         builder.Services.AddSingleton( logSink );
         builder.Logging.AddProvider( new InMemoryLoggerProvider( logSink ) );
 
+        var serviceVersion = GetServiceVersion();
+
         builder.Services.Configure<CloudPrintOptions>( builder.Configuration );
         builder.Services.AddSingleton<ProxyStatus>();
         builder.Services.AddSingleton<PrintMetrics>();
         builder.Services.AddSingleton<PrinterTester>();
         builder.Services.AddSingleton<AuthService>();
+
+        // Redirects are NOT followed: a URL matching no webhook in Rock redirects
+        // to Rock's own 404 page, which answers 200 - so a following client would
+        // report a wrong URL as a broken template instead of a wrong URL.
+        builder.Services.AddHttpClient( "notifications" )
+            .ConfigurePrimaryHttpMessageHandler( () => new HttpClientHandler { AllowAutoRedirect = false } );
+
+        builder.Services.AddSingleton( sp => new FailureNotifier(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptionsMonitor<CloudPrintOptions>>(),
+            sp.GetRequiredService<ILogger<FailureNotifier>>(),
+            serviceVersion ) );
+
         builder.Services.AddHostedService<ProxyWorker>();
 
         // Rate limit /api/auth/login to 5 attempts per minute per source.
@@ -92,8 +110,6 @@ public class Program
         // operators can bind-mount an entire directory (e.g. a TrueNAS dataset
         // or a host folder) rather than a single file.
         builder.Configuration.AddJsonFile( "config/appsettings.json", optional: true, reloadOnChange: true );
-
-        var serviceVersion = GetServiceVersion();
 
         var app = builder.Build();
 
@@ -210,7 +226,28 @@ public class Program
             };
         }
 
-        app.MapGet( "/api/status", ( ProxyStatus status, PrintMetrics metrics, IOptionsMonitor<CloudPrintOptions> options ) =>
+        // Describes the last notification attempt so the dashboard can name the
+        // fault rather than saying "it failed".
+        static object? DescribeNotification( NotificationAttempt? attempt )
+        {
+            if ( attempt == null )
+            {
+                return null;
+            }
+
+            return new
+            {
+                at = attempt.At,
+                eventKind = attempt.Event,
+                printer = attempt.Printer,
+                delivered = attempt.Delivered,
+                statusCode = attempt.StatusCode,
+                outcome = attempt.Outcome,
+                detail = attempt.Detail
+            };
+        }
+
+        app.MapGet( "/api/status", ( ProxyStatus status, PrintMetrics metrics, FailureNotifier notifier, IOptionsMonitor<CloudPrintOptions> options ) =>
             Results.Ok( new
             {
                 version = serviceVersion,
@@ -224,7 +261,13 @@ public class Program
                 labelsFailed = metrics.FailedLabels,
                 slowPrints = metrics.SlowPrints,
                 lastFailure = DescribePrintEvent( metrics.LastFailure ),
-                lastSlowPrint = DescribePrintEvent( metrics.LastSlowPrint )
+                lastSlowPrint = DescribePrintEvent( metrics.LastSlowPrint ),
+                notifications = new
+                {
+                    enabled = options.CurrentValue.NotificationsEnabled,
+                    configured = !string.IsNullOrWhiteSpace( options.CurrentValue.NotificationUrl ),
+                    lastAttempt = DescribeNotification( notifier.LastAttempt )
+                }
             } ) );
 
         app.MapGet( "/api/settings", ( IConfiguration config ) =>
@@ -352,6 +395,94 @@ public class Program
             return Results.Ok( result );
         } ).RequireRateLimiting( "printertest" );
 
+        // Returns the notification settings. The secret is never sent back - only
+        // whether one is set - so it cannot be read out of the UI.
+        app.MapGet( "/api/settings/notifications", ( IOptionsMonitor<CloudPrintOptions> options ) =>
+        {
+            var current = options.CurrentValue;
+
+            return Results.Ok( new
+            {
+                enabled = current.NotificationsEnabled,
+                url = current.NotificationUrl,
+                secretIsSet = !string.IsNullOrWhiteSpace( current.NotificationSecret ),
+                cooldownMinutes = current.NotificationCooldownMinutes
+            } );
+        } );
+
+        // Saves the notification settings. Sending null for the secret leaves the
+        // stored one alone, so the UI can save the other fields without having to
+        // round-trip a value it is never given.
+        app.MapPost( "/api/settings/notifications", async ( NotificationSettingsRequest request, IConfiguration config, IWebHostEnvironment env ) =>
+        {
+            var url = ( request.Url ?? string.Empty ).Trim();
+
+            if ( url.Length > MaxNotificationUrlLength )
+                return Results.Json( new { error = "That URL is too long." }, statusCode: 400 );
+
+            if ( url.Length > 0 && !Uri.TryCreate( url, UriKind.Absolute, out _ ) )
+                return Results.Json( new { error = "That is not a valid URL." }, statusCode: 400 );
+
+            // The secret travels in a header. Refuse plain HTTP outright rather
+            // than accepting a setting that can only ever send it in the clear.
+            if ( url.Length > 0 && !url.StartsWith( "https://", StringComparison.OrdinalIgnoreCase ) )
+                return Results.Json( new { error = "The webhook URL must start with https:// - the secret is sent in a request header." }, statusCode: 400 );
+
+            var settingsPath = Path.Combine( env.ContentRootPath, "config", "appsettings.json" );
+            Directory.CreateDirectory( Path.GetDirectoryName( settingsPath )! );
+
+            JsonNode json;
+
+            if ( File.Exists( settingsPath ) )
+            {
+                await using var stream = File.OpenRead( settingsPath );
+                json = await JsonNode.ParseAsync( stream ) ?? new JsonObject();
+            }
+            else
+            {
+                json = new JsonObject();
+            }
+
+            json["NotificationsEnabled"] = request.Enabled;
+            json["NotificationUrl"] = url;
+            json["NotificationCooldownMinutes"] = Math.Clamp( request.CooldownMinutes ?? 5, 0, 1440 );
+
+            if ( request.Secret != null )
+            {
+                if ( string.IsNullOrWhiteSpace( request.Secret ) )
+                    json.AsObject().Remove( "NotificationSecret" );
+                else
+                    json["NotificationSecret"] = request.Secret;
+            }
+
+            await File.WriteAllTextAsync( settingsPath, json.ToJsonString( new JsonSerializerOptions { WriteIndented = true } ) );
+
+            if ( config is IConfigurationRoot root )
+                root.Reload();
+
+            return Results.Ok( new { success = true } );
+        } );
+
+        // Sends a real notification so the whole chain can be proved at
+        // configuration time: URL, secret, address allowance, webhook match,
+        // workflow type lookup and activation. Rate limited, because it reaches
+        // out to another server on demand.
+        //
+        // This messages whoever the Rock workflow is configured to tell. The UI
+        // says so beside the button.
+        app.MapPost( "/api/notifications/test", async ( FailureNotifier notifier, CancellationToken cancellationToken ) =>
+        {
+            var attempt = await notifier.SendTestAsync( cancellationToken );
+
+            return Results.Ok( new
+            {
+                delivered = attempt.Delivered,
+                statusCode = attempt.StatusCode,
+                outcome = attempt.Outcome,
+                detail = attempt.Detail
+            } );
+        } ).RequireRateLimiting( "printertest" );
+
         app.MapPost( "/api/restart", ( IHostApplicationLifetime lifetime ) =>
         {
             // Delay slightly so the HTTP response is fully sent before shutdown begins.
@@ -396,3 +527,9 @@ internal record SettingsRequest( string Url, string Name, string Id );
 internal record LoginRequest( string Password );
 internal record SecurityRequest( string? CurrentPassword, string? NewPassword );
 internal record PrinterTestRequest( string? Address, string? Mode );
+
+/// <summary>
+/// Notification settings from the web UI. <c>Secret</c> is null when the caller
+/// is leaving the stored secret alone, and empty when clearing it.
+/// </summary>
+internal record NotificationSettingsRequest( bool Enabled, string? Url, string? Secret, int? CooldownMinutes );
