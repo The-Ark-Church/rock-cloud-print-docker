@@ -149,57 +149,121 @@ public class ZplResolveTests
         Assert.Equal( template, ZplTemplate.Resolve( template, "ABC" ) );
     }
 
-    [Fact]
-    public void MarkCodePlaceholder_TurnsACapturedLabelIntoATemplate()
-    {
-        // What capture produces: a label Rock printed, carrying whatever
-        // placeholder its designer put in the security code field.
-        var captured = Latin1( "^XA^FT1,1^A0N,135,134^FDWWW^FS^FT4,200^FDName^FS^XZ" );
+    /// <summary>
+    /// A real Next-Gen label, as Rock actually printed it and this captured it.
+    ///
+    /// <para>
+    /// Every awkward thing about capture is in here, which is why it is the
+    /// fixture rather than something tidier. The two security code fields are
+    /// <strong>empty</strong>, because Rock renders them from an attendance and
+    /// a test print has none. Empty is written "\&", which also appears at the
+    /// end of the two title fields - so replacing by text rewrites the wrong
+    /// ones. And there are two codes, not one, because the receipt is torn in
+    /// half.
+    /// </para>
+    /// </summary>
+    private const string CapturedReceipt =
+        "^XA^CI28^PW609^LL406\r\n" +
+        "^FO12,322^FB279,2,0,L^A0N,33,33^FDPlease keep to pick up your child^FS\r\n" +
+        "^FO0,76^GB608,199,199,B,0^FS\r\n" +
+        "^FO318,321^FB279,2,0,L^A0N,33,33^FDPlease keep to pick up your child^FS\r\n" +
+        "^FO304,2^GD0,73,3,B,L^FS\r\n" +
+        "^FO0,126^FR^FB304,1,0,C^A0N,128,112^FD\\&^FS\r\n" +
+        "^FO304,126^FR^FB304,1,0,C^A0N,128,112^FD\\&^FS\r\n" +
+        "^FO4,12^FB295,1,0,C^A0N,39,39^FDChild Receipt\\&^FS\r\n" +
+        "^FO309,13^FB296,1,0,C^A0N,39,39^FDChild Receipt\\&^FS\r\n" +
+        "^FO304,76^GB2,200,2,W^FS\r\n" +
+        "^FO304,275^GD0,130,3,B,L^FS^MMC^XZ";
 
-        Assert.Equal( Latin1( "^XA^FT1,1^A0N,135,134^FD???^FS^FT4,200^FDName^FS^XZ" ),
-                      ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+    [Fact]
+    public void Fields_ListsEveryFieldInOrderIncludingTheEmptyOnes()
+    {
+        var fields = ZplTemplate.Fields( Latin1( CapturedReceipt ) );
+
+        Assert.Equal( 6, fields.Count );
+        Assert.Equal( new[] { 0, 1, 2, 3, 4, 5 }, fields.Select( f => f.Index ) );
+
+        // The two codes. Empty, and that is the normal case rather than a fault.
+        Assert.Equal( "", fields[2].Text );
+        Assert.Equal( "", fields[3].Text );
+
+        Assert.Equal( "Please keep to pick up your child", fields[0].Text );
+        Assert.Equal( "Child Receipt", fields[4].Text );
     }
 
     [Fact]
-    public void MarkCodePlaceholder_LeavesEverythingOutsideADataFieldAlone()
+    public void Fields_ReportsTheFontHeightThatMakesTheCodeObvious()
     {
-        // WWW appearing in a command is not a field, and rewriting it would
-        // corrupt the label.
-        var captured = Latin1( "^XA^FXWWW note^FS^FDWWW^FS^XZ" );
+        var fields = ZplTemplate.Fields( Latin1( CapturedReceipt ) );
 
-        Assert.Equal( Latin1( "^XA^FXWWW note^FS^FD???^FS^XZ" ),
-                      ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+        // With both code fields empty there is nothing to read, so size is what
+        // tells somebody which is which: the code is printed four times the
+        // height of the caption beneath it.
+        Assert.Equal( new[] { 33, 33, 128, 128, 39, 39 }, fields.Select( f => f.FontHeight ) );
     }
 
     [Fact]
-    public void MarkCodePlaceholder_MarksEveryFieldHoldingIt()
+    public void MarkCodeFields_MarksBothHalvesAndLeavesTheTitlesAlone()
     {
-        // A receipt torn in half carries the code on both halves.
-        var captured = Latin1( "^XA^FDWWW^FS^FDWWW^FS^XZ" );
+        var marked = Encoding.Latin1.GetString(
+            ZplTemplate.MarkCodeFields( Latin1( CapturedReceipt ), new[] { 2, 3 } ) );
 
-        Assert.Equal( Latin1( "^XA^FD???^FS^FD???^FS^XZ" ),
-                      ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+        Assert.Equal( 2, CountOf( marked, "^FD???^FS" ) );
+
+        // The bug this replaced: the titles end in the same "\\&" the empty code
+        // fields contained, so matching by text turned them into
+        // "Child Receipt???" on a label somebody would then have printed.
+        Assert.Equal( 2, CountOf( marked, "^FDChild Receipt\\&^FS" ) );
+        Assert.DoesNotContain( "Child Receipt???", marked, StringComparison.Ordinal );
     }
 
     [Fact]
-    public void MarkCodePlaceholder_LeavesALabelAloneWhenThePlaceholderIsNotThere()
+    public void MarkCodeFields_ChangesNothingButTheFieldsChosen()
     {
-        // The save then fails validation for having nowhere to put a code,
-        // which is a better answer than silently storing something unusable.
-        var captured = Latin1( "^XA^FDName^FS^XZ" );
+        var original = Latin1( CapturedReceipt );
+        var marked = ZplTemplate.MarkCodeFields( original, new[] { 2 } );
+        var text = Encoding.Latin1.GetString( marked );
 
-        Assert.Equal( captured, ZplTemplate.MarkCodePlaceholder( captured, "NOTHERE" ) );
-        Assert.False( ZplTemplate.ContainsCodeToken( ZplTemplate.MarkCodePlaceholder( captured, "NOTHERE" ) ) );
+        // Layout, sizes, the cutter command and the graphics all survive.
+        foreach ( var expected in new[] { "^PW609", "^LL406", "^MMC", "^FO0,126^FR^FB304,1,0,C^A0N,128,112",
+                                          "^GB608,199,199,B,0", "^GD0,130,3,B,L" } )
+        {
+            Assert.Contains( expected, text, StringComparison.Ordinal );
+        }
+
+        Assert.Equal( 1, CountOf( text, "^FD???^FS" ) );
     }
 
     [Fact]
-    public void MarkCodePlaceholder_SurvivesAHighByteLabel()
+    public void MarkCodeFields_ProducesSomethingTheStoreWillAccept()
+    {
+        var marked = ZplTemplate.MarkCodeFields( Latin1( CapturedReceipt ), new[] { 2, 3 } );
+
+        Assert.True( ZplTemplate.LooksLikeZpl( marked ) );
+        Assert.True( ZplTemplate.ContainsCodeToken( marked ) );
+
+        // And once stored, a run resolves both halves to the same code.
+        var resolved = Encoding.Latin1.GetString( ZplTemplate.Resolve( marked, "K7M" ) );
+
+        Assert.Equal( 2, CountOf( resolved, "^FDK7M^FS" ) );
+    }
+
+    [Fact]
+    public void MarkCodeFields_WithNothingChosenLeavesTheLabelAlone()
+    {
+        var original = Latin1( CapturedReceipt );
+
+        Assert.Equal( original, ZplTemplate.MarkCodeFields( original, Array.Empty<int>() ) );
+    }
+
+    [Fact]
+    public void MarkCodeFields_SurvivesAHighByteLabel()
     {
         var high = new byte[] { 0x80, 0xA9, 0xFF };
         var captured = Concat( Latin1( "^XA^GFA," ), high, Latin1( "^FS^FDWWW^FS^XZ" ) );
         var expected = Concat( Latin1( "^XA^GFA," ), high, Latin1( "^FS^FD???^FS^XZ" ) );
 
-        Assert.Equal( expected, ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+        Assert.Equal( expected, ZplTemplate.MarkCodeFields( captured, new[] { 0 } ) );
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

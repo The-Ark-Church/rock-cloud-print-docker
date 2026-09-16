@@ -847,15 +847,19 @@ public class Program
                 return Results.Json( new { error = "There is nothing captured to save." }, statusCode: 409 );
 
             var name = ( request.Name ?? string.Empty ).Trim();
-            var placeholder = request.Placeholder ?? string.Empty;
+            var fields = request.Fields ?? Array.Empty<int>();
 
             if ( !LabelStore.IsValidName( name ) )
                 return Results.Json( new { error = $"A label name can be up to {LabelStore.MaxNameLength} letters, digits, spaces, dots, dashes and underscores." }, statusCode: 400 );
 
-            if ( placeholder.Length == 0 )
+            if ( fields.Length == 0 )
                 return Results.Json( new { error = "Choose which field holds the security code." }, statusCode: 400 );
 
-            var template = ZplTemplate.MarkCodePlaceholder( captured, placeholder );
+            // By position rather than by text. On a captured label the security
+            // code field is usually empty - Rock renders it from an attendance
+            // that a test print does not have - and whatever stands in for
+            // empty appears in other fields too.
+            var template = ZplTemplate.MarkCodeFields( captured, fields );
 
             var outcome = labels.Save( name, template );
 
@@ -872,7 +876,7 @@ public class Program
                     new { error = $"There is already a label called \'{name}\'. Delete that one first, or use another name." }, statusCode: 409 ),
                 LabelSaveOutcome.NoCodeToken => Results.Json( new
                 {
-                    error = "That placeholder was not found in a printable field, so the saved label would have nowhere to put a security code."
+                    error = "Those fields are not in the captured label, so it would have nowhere to put a security code."
                 }, statusCode: 400 ),
                 LabelSaveOutcome.NotZpl => Results.Json(
                     new { error = "What was captured does not look like ZPL." }, statusCode: 400 ),
@@ -953,11 +957,11 @@ internal record LabelPreviewRequest( string[]? Names, string? Mode, int? CodeLen
 internal record CaptureArmRequest( int? Port );
 
 /// <summary>
-/// Saving a captured label. <c>Placeholder</c> is the text its designer put in
-/// the security code field, chosen from the fields the capture found rather
-/// than typed from memory.
+/// Saving a captured label. <c>Fields</c> are the positions of the fields that
+/// hold the security code, picked from the list the capture reports. More than
+/// one is normal - a receipt torn in half carries the code on both halves.
 /// </summary>
-internal record CaptureSaveRequest( string? Name, string? Placeholder );
+internal record CaptureSaveRequest( string? Name, int[]? Fields );
 
 internal record BlankPrintRequest(
     string? Address,

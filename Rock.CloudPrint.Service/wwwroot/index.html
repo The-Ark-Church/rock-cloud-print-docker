@@ -302,7 +302,8 @@
                 </div>
 
                 <div id="capture-result" class="hidden border-t border-gray-200 pt-2 space-y-2">
-                    <p class="text-gray-700">Which field holds the security code?</p>
+                    <p class="text-gray-700">Which fields hold the security code?</p>
+                    <p id="capture-hint" class="text-gray-500"></p>
                     <div id="capture-fields" class="space-y-1"></div>
                     <div class="flex items-center gap-2">
                         <input id="capture-name" type="text" placeholder="Name this label" maxlength="64"
@@ -1558,38 +1559,58 @@
 
             stopCapturePolling();
 
-            // The fields as they were printed. Which one is the code is a
-            // decision only whoever designed the label can make, so it is
-            // shown rather than guessed at.
+            // Every field, in order. More than one can be the code - a receipt
+            // torn in half carries it on both halves - so these are tick boxes
+            // rather than a single choice.
+            //
+            // On a label Rock rendered without an attendance behind it the code
+            // fields are EMPTY, so there is often no text to recognise. The
+            // font height is what gives it away: the code is the one thing on a
+            // check-in label printed large.
+            const tallest = data.fields.reduce( ( m, f ) => Math.max( m, f.fontHeight || 0 ), 0 );
+
             document.getElementById( 'capture-fields' ).innerHTML = data.fields.length
-                ? data.fields.map( ( f, i ) =>
-                    '<label class="flex items-center gap-2 cursor-pointer">' +
-                        '<input type="radio" name="capture-field" value="' + i + '"' +
-                            ( i === 0 ? ' checked' : '' ) +
-                            ' class="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500">' +
-                        '<code class="bg-white px-1 rounded border border-gray-200">' + escHtml( f ) + '</code>' +
-                    '</label>' ).join( '' )
+                ? data.fields.map( f => {
+                    const big = tallest > 0 && f.fontHeight === tallest;
+                    const shown = f.text
+                        ? '<code class="bg-white px-1 rounded border border-gray-200">' + escHtml( f.text ) + '</code>'
+                        : '<span class="italic text-gray-400">empty</span>';
+                    const size = f.fontHeight
+                        ? '<span class="text-gray-400 tabular-nums">' + f.fontHeight + ' dots tall</span>'
+                        : '';
+                    return '<label class="flex items-center gap-2 cursor-pointer">' +
+                        '<input type="checkbox" name="capture-field" value="' + f.index + '"' +
+                            ( big ? ' checked' : '' ) +
+                            ' class="h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500">' +
+                        '<span class="text-gray-400 tabular-nums w-4">' + ( f.index + 1 ) + '.</span>' +
+                        shown + size +
+                    '</label>';
+                } ).join( '' )
                 : '<p class="text-red-700">No printable fields were found in that label.</p>';
 
-            captureFields = data.fields;
+            // The largest fields start ticked, which on a real check-in label is
+            // the right answer. It is a starting point, not a decision - only
+            // whoever designed the label knows for certain.
+            document.getElementById( 'capture-hint' ).textContent = tallest > 0
+                ? 'The largest fields are ticked to start with, since the code is normally the biggest thing on the label. Change it if that is wrong.'
+                : '';
         }
-
-        let captureFields = [];
 
         async function saveCapture() {
             hideCaptureMessage();
 
-            const chosen = document.querySelector( 'input[name="capture-field"]:checked' );
+            const fields = [...document.querySelectorAll( 'input[name="capture-field"]:checked' )]
+                .map( box => parseInt( box.value, 10 ) );
             const name   = document.getElementById( 'capture-name' ).value.trim();
 
-            if ( !chosen ) { showCaptureMessage( 'bad', 'Choose which field holds the security code.' ); return; }
-            if ( !name )   { showCaptureMessage( 'bad', 'Give the label a name.' ); return; }
+            if ( !fields.length ) { showCaptureMessage( 'bad', 'Tick which fields hold the security code.' ); return; }
+            if ( !name )          { showCaptureMessage( 'bad', 'Give the label a name.' ); return; }
 
             try {
                 const resp = await authFetch( '/api/labels/capture/save', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify( { name, placeholder: captureFields[parseInt( chosen.value, 10 )] } )
+                    body:    JSON.stringify( { name, fields } )
                 } );
                 const data = await resp.json();
 

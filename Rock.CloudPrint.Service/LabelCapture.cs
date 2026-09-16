@@ -47,10 +47,10 @@ internal sealed record CaptureSnapshot
     public string? From { get; init; }
 
     /// <summary>
-    /// The distinct <c>^FD…^FS</c> contents of the captured label, so a person
-    /// can pick out which one holds the security code.
+    /// Every <c>^FD…^FS</c> field of the captured label, in order, so a person
+    /// can pick out which hold the security code.
     /// </summary>
-    public IReadOnlyList<string> Fields { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<ZplTemplate.ZplField> Fields { get; init; } = Array.Empty<ZplTemplate.ZplField>();
 
     public string? Error { get; init; }
 }
@@ -158,7 +158,7 @@ internal sealed class LabelCapture : IDisposable
                 Bytes = _captured?.Length ?? 0,
                 CapturedAt = _capturedAt,
                 From = _from,
-                Fields = _captured == null ? Array.Empty<string>() : FieldsIn( _captured ),
+                Fields = _captured == null ? Array.Empty<ZplTemplate.ZplField>() : ZplTemplate.Fields( _captured ),
                 Error = _error
             };
         }
@@ -371,36 +371,4 @@ internal sealed class LabelCapture : IDisposable
         }
     }
 
-    /// <summary>
-    /// The distinct contents of the label's data fields, longest first.
-    ///
-    /// <para>
-    /// This is how somebody identifies the placeholder they put in the code
-    /// field when they designed the label. Showing the fields rather than
-    /// guessing is deliberate: which field holds the code is a decision only
-    /// the person who designed it can make.
-    /// </para>
-    /// </summary>
-    private static IReadOnlyList<string> FieldsIn( byte[] content )
-    {
-        var text = ZplTemplate.ByteEncoding.GetString( content );
-        var seen = new List<string>();
-
-        foreach ( var field in ZplTemplate.DataFields( text ) )
-        {
-            var value = text.Substring( field.Start, field.Length ).Trim();
-
-            // Field data can carry a leading ^FH escape marker and similar.
-            // What is wanted here is something a person recognises, so empty
-            // and duplicate values are dropped rather than presented.
-            if ( value.Length == 0 || value.Length > 120 || seen.Contains( value, StringComparer.Ordinal ) )
-            {
-                continue;
-            }
-
-            seen.Add( value );
-        }
-
-        return seen;
-    }
 }

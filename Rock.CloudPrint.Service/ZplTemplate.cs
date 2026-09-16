@@ -15,6 +15,7 @@
 // </copyright>
 //
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Rock.CloudPrint.Service;
 
@@ -147,22 +148,70 @@ internal static class ZplTemplate
     }
 
     /// <summary>
-    /// Turns a captured label into a template, by replacing the placeholder its
-    /// designer put in the security code field with the token this understands.
+    /// One <c>^FD…^FS</c> field of a label, as a person needs to see it in
+    /// order to say which one holds the security code.
+    /// </summary>
+    /// <param name="Index">Its position in the label, counting from zero.</param>
+    /// <param name="Text">What it prints. Empty is normal and meaningful.</param>
+    /// <param name="FontHeight">
+    /// The height in dots of the font set before it, or zero if none was.
+    /// This is usually what identifies the code: it is the one thing on a
+    /// check-in label printed large, so on a real label it stands out from the
+    /// captions by a factor of three or four.
+    /// </param>
+    public record ZplField( int Index, string Text, int FontHeight );
+
+    /// <summary>
+    /// Every field in the label, in order.
     ///
     /// <para>
-    /// Only inside <c>^FD…^FS</c>, and only that exact text, for the same
-    /// reason substitution is: a label is the designer's, and nothing outside
-    /// the field being marked should move. If the placeholder also appears as
-    /// static text elsewhere in a data field it is replaced there too, which is
-    /// why the person capturing picks the value rather than typing a guess.
+    /// Not deduplicated and not filtered, unlike an earlier version of this.
+    /// Both mattered: a receipt torn in half carries the same code twice and
+    /// both must be selectable, and a field can legitimately be empty - which
+    /// is exactly what a security code looks like on a label Rock rendered
+    /// without an attendance behind it.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<ZplField> Fields( ReadOnlySpan<byte> content )
+    {
+        var text = ByteEncoding.GetString( content );
+        var fields = new List<ZplField>();
+        var searchedTo = 0;
+
+        foreach ( var field in DataFields( text ) )
+        {
+            var value = text.Substring( field.Start, field.Length );
+
+            // ZPL writes a line break inside field data as \&. It carries no
+            // meaning here and makes an empty field look like it holds
+            // something, so it is taken out for display only.
+            var display = value.Replace( "\\&", " " ).Replace( "\\*", " " ).Trim();
+
+            fields.Add( new ZplField( fields.Count, display, FontHeightBefore( text, searchedTo, field.Start ) ) );
+
+            searchedTo = field.Start + field.Length;
+        }
+
+        return fields;
+    }
+
+    /// <summary>
+    /// Replaces the contents of the given fields with the code token, so a
+    /// captured label becomes a template.
+    ///
+    /// <para>
+    /// By position rather than by matching text. Matching text cannot work on a
+    /// captured label: the security code field is often empty, and whatever
+    /// stands in for empty appears in other fields too - so replacing it would
+    /// rewrite the wrong ones. Position is unambiguous, and it lets both halves
+    /// of a torn receipt be marked.
     /// </para>
     /// </summary>
     /// <param name="content">The captured label.</param>
-    /// <param name="placeholder">The text standing in for the security code.</param>
-    public static byte[] MarkCodePlaceholder( ReadOnlySpan<byte> content, string placeholder )
+    /// <param name="indexes">Which fields hold the security code.</param>
+    public static byte[] MarkCodeFields( ReadOnlySpan<byte> content, IReadOnlyCollection<int> indexes )
     {
-        if ( string.IsNullOrEmpty( placeholder ) )
+        if ( indexes.Count == 0 )
         {
             return content.ToArray();
         }
@@ -170,22 +219,58 @@ internal static class ZplTemplate
         var text = ByteEncoding.GetString( content );
         var builder = new StringBuilder( text.Length + 16 );
         var copied = 0;
+        var index = 0;
 
         foreach ( var field in DataFields( text ) )
         {
             builder.Append( text, copied, field.Start - copied );
 
-            builder.Append( text.AsSpan( field.Start, field.Length )
-                                .ToString()
-                                .Replace( placeholder, CodeToken, StringComparison.Ordinal ) );
+            // The whole field becomes the token. What was there was either a
+            // rendered value from whatever Rock printed, or nothing at all;
+            // neither belongs on a blank.
+            builder.Append( indexes.Contains( index )
+                ? CodeToken
+                : text.Substring( field.Start, field.Length ) );
 
             copied = field.Start + field.Length;
+            index++;
         }
 
         builder.Append( text, copied, text.Length - copied );
 
         return ByteEncoding.GetBytes( builder.ToString() );
     }
+
+    /// <summary>
+    /// The height of the last font command before a field, in dots.
+    ///
+    /// <para>
+    /// Matches <c>^A0N,128,112</c> and its relatives - a font letter, an
+    /// optional orientation, then height and width. Only what falls between
+    /// the previous field and this one is searched, so each field reports the
+    /// font actually in force for it.
+    /// </para>
+    /// </summary>
+    private static int FontHeightBefore( string text, int searchFrom, int fieldStart )
+    {
+        if ( fieldStart <= searchFrom )
+        {
+            return 0;
+        }
+
+        var between = text.Substring( searchFrom, fieldStart - searchFrom );
+        var matches = FontCommand.Matches( between );
+
+        return matches.Count > 0 && int.TryParse( matches[^1].Groups[1].Value, out var height )
+            ? height
+            : 0;
+    }
+
+    /// <summary>
+    /// A scalable or bitmap font selection: <c>^A</c>, the font, an optional
+    /// orientation letter, then height and width.
+    /// </summary>
+    private static readonly Regex FontCommand = new( @"\^A[0-9A-Za-z]?[NRIB]?,(\d+),(\d+)", RegexOptions.Compiled );
 
     /// <summary>
     /// The last <c>^XA…^XZ</c> format in the template, or the whole thing if
