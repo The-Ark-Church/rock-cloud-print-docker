@@ -18,4 +18,15 @@
     <ProjectReference Include="..\Rock.CloudPrint.Shared\Rock.CloudPrint.Shared.csproj" />
   </ItemGroup>
 
+  <!--
+    Everything in this assembly is internal, and should stay that way - nothing
+    outside it is a consumer. This lets the test project see those types without
+    widening a single one of them to public. It emits an assembly attribute and
+    changes no behaviour; Rock.CloudPrint.Shared already does the same for this
+    project.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rock.CloudPrint.Tests" />
+  </ItemGroup>
+
 </Project>
