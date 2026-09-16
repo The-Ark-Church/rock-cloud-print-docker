@@ -1350,6 +1350,11 @@
             showBoxMessage( 'blank-message', kind, html, '' );
         }
 
+        // How long a success notice stays up before clearing itself.
+        const MESSAGE_LINGER_MS = 10000;
+
+        const messageTimers = {};
+
         function showBoxMessage( id, kind, html, extra ) {
             const el = document.getElementById( id );
             const styles = {
@@ -1358,12 +1363,37 @@
                 waiting: 'bg-gray-50 border border-gray-200 text-gray-600',
             };
             el.className = ( extra + ' rounded-md p-3 text-sm ' + styles[kind] ).trim();
-            el.innerHTML = html;
+
+            // Every notice can be dismissed. Being stuck with one you have read
+            // and dealt with is a small thing that is irritating every time.
+            el.innerHTML =
+                '<div class="flex items-start justify-between gap-3">' +
+                    '<div class="min-w-0">' + html + '</div>' +
+                    '<button onclick="hideBoxMessage(\'' + id + '\')" title="Dismiss" ' +
+                        'class="shrink-0 leading-none opacity-50 hover:opacity-100">&times;</button>' +
+                '</div>';
             el.classList.remove( 'hidden' );
+
+            if ( messageTimers[id] ) clearTimeout( messageTimers[id] );
+            delete messageTimers[id];
+
+            // A success is an acknowledgement rather than something to act on,
+            // so it goes away on its own. A failure stays until it is dismissed
+            // or replaced, because it is the only record of what went wrong.
+            if ( kind === 'ok' ) {
+                messageTimers[id] = setTimeout( () => hideBoxMessage( id ), MESSAGE_LINGER_MS );
+            }
+        }
+
+        function hideBoxMessage( id ) {
+            document.getElementById( id ).classList.add( 'hidden' );
+
+            if ( messageTimers[id] ) clearTimeout( messageTimers[id] );
+            delete messageTimers[id];
         }
 
         function hideBlankMessage() {
-            document.getElementById( 'blank-message' ).classList.add( 'hidden' );
+            hideBoxMessage( 'blank-message' );
         }
 
         async function loadLabels() {
@@ -1487,7 +1517,7 @@
         }
 
         function hideCaptureMessage() {
-            document.getElementById( 'capture-message' ).classList.add( 'hidden' );
+            hideBoxMessage( 'capture-message' );
         }
 
         async function armCapture() {
