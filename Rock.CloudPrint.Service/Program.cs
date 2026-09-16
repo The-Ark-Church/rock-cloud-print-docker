@@ -65,6 +65,7 @@ public class Program
         builder.Services.AddSingleton<PrintMetrics>();
         builder.Services.AddSingleton<PrinterTester>();
         builder.Services.AddSingleton<LabelStore>();
+        builder.Services.AddSingleton<BlankLabelStateStore>();
         builder.Services.AddSingleton<AuthService>();
 
         // Redirects are NOT followed: a URL matching no webhook in Rock redirects
@@ -126,6 +127,11 @@ public class Program
         // mount is a reason to have no demo labels, not a reason for the proxy
         // not to start.
         app.Services.GetRequiredService<LabelStore>().SeedIfFirstRun();
+
+        // Resolved at startup rather than on first use so that a record of used
+        // security codes which cannot be read is reported in the log while
+        // somebody is looking at it, not at the moment they press print.
+        app.Services.GetRequiredService<BlankLabelStateStore>();
 
         app.UseRateLimiter();
 

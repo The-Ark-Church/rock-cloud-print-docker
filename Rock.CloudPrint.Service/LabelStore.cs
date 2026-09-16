@@ -253,7 +253,7 @@ internal sealed class LabelStore
                 return LabelSaveOutcome.AlreadyExists;
             }
 
-            WriteAtomically( path, content );
+            AtomicFile.Write( path, content );
 
             _logger.LogInformation( "Stored the label {name}, {bytes} bytes.", name, content.Length );
 
@@ -309,7 +309,7 @@ internal sealed class LabelStore
 
                 foreach ( var (name, content) in ReadDemoTemplates() )
                 {
-                    WriteAtomically( ResolvePath( name ), content );
+                    AtomicFile.Write( ResolvePath( name ), content );
                 }
 
                 _logger.LogInformation( "Created {directory} and seeded the demo labels.", _directory );
@@ -373,18 +373,5 @@ internal sealed class LabelStore
         }
 
         return candidate;
-    }
-
-    /// <summary>
-    /// Writes to a temporary file and moves it into place, so a proxy losing
-    /// power mid-write cannot leave a half-written template that would print
-    /// as garbage.
-    /// </summary>
-    private static void WriteAtomically( string path, byte[] content )
-    {
-        var temporary = path + ".tmp";
-
-        File.WriteAllBytes( temporary, content );
-        File.Move( temporary, path, overwrite: true );
     }
 }

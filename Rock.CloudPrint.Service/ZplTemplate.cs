@@ -82,6 +82,53 @@ internal static class ZplTemplate
     }
 
     /// <summary>
+    /// Produces the bytes for one copy: the template with the security code
+    /// put where the token is.
+    ///
+    /// <para>
+    /// Substitution happens only inside <c>^FD…^FS</c> blocks, and every other
+    /// byte of the template is copied across untouched. That is the whole
+    /// design: the printer receives the label its author wrote, with one field
+    /// filled in. Nothing rewrites <c>^PQ</c>, nothing rewrites <c>^MM</c>,
+    /// nothing rewrites the size - so the cut behaviour and the stock the
+    /// label was designed for are preserved by construction rather than by
+    /// remembering to preserve them.
+    /// </para>
+    ///
+    /// <para>
+    /// A template with no token comes back unchanged. Uploads are checked for
+    /// one, so that means a file put in place by hand, and printing it as it
+    /// stands is more useful than refusing at the moment somebody presses
+    /// print.
+    /// </para>
+    /// </summary>
+    /// <param name="content">The stored template.</param>
+    /// <param name="code">The security code for this copy.</param>
+    public static byte[] Resolve( ReadOnlySpan<byte> content, string code )
+    {
+        var text = ByteEncoding.GetString( content );
+        var builder = new StringBuilder( text.Length + 16 );
+        var copied = 0;
+
+        foreach ( var field in DataFields( text ) )
+        {
+            // Everything between the end of the last field and the start of
+            // this one, verbatim.
+            builder.Append( text, copied, field.Start - copied );
+
+            builder.Append( text.AsSpan( field.Start, field.Length )
+                                .ToString()
+                                .Replace( CodeToken, code, StringComparison.Ordinal ) );
+
+            copied = field.Start + field.Length;
+        }
+
+        builder.Append( text, copied, text.Length - copied );
+
+        return ByteEncoding.GetBytes( builder.ToString() );
+    }
+
+    /// <summary>
     /// The printable width and length in dots, from the last <c>^PW</c> and
     /// <c>^LL</c> in the template. Zero when the template does not say.
     ///
