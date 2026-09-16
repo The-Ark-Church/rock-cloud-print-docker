@@ -273,6 +273,53 @@ internal static class ZplTemplate
     private static readonly Regex FontCommand = new( @"\^A[0-9A-Za-z]?[NRIB]?,(\d+),(\d+)", RegexOptions.Compiled );
 
     /// <summary>
+    /// Ends a label with a cut, or with the cut suppressed, instead of
+    /// whatever the template said.
+    ///
+    /// <para>
+    /// This is how Rock does it, and the commands are taken from Rock's own
+    /// <c>LabelPrintProvider</c> so that a printer receives exactly what it
+    /// receives during check-in. The trailing <c>^XZ</c> is replaced with
+    /// <c>^MMC^XZ</c> to cut, or <c>^XB^XZ</c> to suppress the backfeed - which
+    /// suppresses the cut with it - on every label of a copy but the last.
+    /// </para>
+    ///
+    /// <para>
+    /// Appending rather than rewriting means the template's own <c>^MMT</c> or
+    /// <c>^MMC</c> does not have to be found or removed: ZPL takes commands in
+    /// order, so whichever comes last wins, and this comes last.
+    /// </para>
+    ///
+    /// <para>
+    /// Rock's version sizes its buffer one byte short and overwrites the
+    /// character before the final caret, which on a label ending <c>^FS^XZ</c>
+    /// clips the <c>S</c>. That is not reproduced here.
+    /// </para>
+    /// </summary>
+    /// <param name="content">The resolved label.</param>
+    /// <param name="cut">Whether this label should end with a cut.</param>
+    public static byte[] AmendForCutter( byte[] content, bool cut )
+    {
+        var text = ByteEncoding.GetString( content );
+        var end = text.LastIndexOf( "^XZ", StringComparison.Ordinal );
+
+        if ( end < 0 )
+        {
+            // Nothing that looks like the end of a label. Send it untouched
+            // rather than appending commands to something not understood.
+            return content;
+        }
+
+        var replacement = ByteEncoding.GetBytes( ( cut ? "^MMC^XZ" : "^XB^XZ" ) + "\r\n" );
+        var amended = new byte[end + replacement.Length];
+
+        Array.Copy( content, 0, amended, 0, end );
+        Array.Copy( replacement, 0, amended, end, replacement.Length );
+
+        return amended;
+    }
+
+    /// <summary>
     /// The last <c>^XA…^XZ</c> format in the template, or the whole thing if
     /// there is not a complete one.
     ///

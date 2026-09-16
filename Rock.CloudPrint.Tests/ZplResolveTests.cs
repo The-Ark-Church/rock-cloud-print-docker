@@ -266,6 +266,81 @@ public class ZplResolveTests
         Assert.Equal( expected, ZplTemplate.MarkCodeFields( captured, new[] { 0 } ) );
     }
 
+    [Fact]
+    public void AmendForCutter_EndsTheLastLabelOfACopyWithACut()
+    {
+        var label = Latin1( "^XA^MMT^PW609^FD???^FS^PQ1,0,1,Y^XZ" );
+
+        Assert.Equal( Latin1( "^XA^MMT^PW609^FD???^FS^PQ1,0,1,Y^MMC^XZ\r\n" ),
+                      ZplTemplate.AmendForCutter( label, cut: true ) );
+    }
+
+    [Fact]
+    public void AmendForCutter_SuppressesTheCutOnEveryOtherLabel()
+    {
+        var label = Latin1( "^XA^MMT^PW609^FD???^FS^PQ1,0,1,Y^XZ" );
+
+        Assert.Equal( Latin1( "^XA^MMT^PW609^FD???^FS^PQ1,0,1,Y^XB^XZ\r\n" ),
+                      ZplTemplate.AmendForCutter( label, cut: false ) );
+    }
+
+    [Fact]
+    public void AmendForCutter_DoesNotClipTheByteBeforeTheEnd()
+    {
+        // Rock's own version sizes its buffer one short and writes one byte
+        // early, which on a label ending ^FS^XZ eats the S. This is the
+        // regression test for not reproducing that.
+        var label = Latin1( "^XA^FD???^FS^XZ" );
+        var cut = Encoding.Latin1.GetString( ZplTemplate.AmendForCutter( label, cut: true ) );
+
+        Assert.StartsWith( "^XA^FD???^FS^MMC^XZ", cut, StringComparison.Ordinal );
+        Assert.DoesNotContain( "^F^MMC", cut, StringComparison.Ordinal );
+    }
+
+    [Theory]
+    [InlineData( "Demo-Child-Label.zpl" )]
+    [InlineData( "Demo-Parent-Receipt.zpl" )]
+    [InlineData( "Demo-Roster-Label.zpl" )]
+    public void AmendForCutter_TouchesOnlyTheEndOfTheLabel( string resource )
+    {
+        var template = DemoTemplate( resource );
+        var amended = ZplTemplate.AmendForCutter( template, cut: true );
+
+        // Everything up to the final ^XZ is identical, including the setup
+        // format these templates open with, which also ends in ^XZ.
+        var end = Encoding.Latin1.GetString( template ).LastIndexOf( "^XZ", StringComparison.Ordinal );
+
+        Assert.Equal( template.Take( end ), amended.Take( end ) );
+        Assert.EndsWith( "^MMC^XZ\r\n", Encoding.Latin1.GetString( amended ), StringComparison.Ordinal );
+    }
+
+    [Fact]
+    public void AmendForCutter_OverridesWhateverModeTheTemplateAskedFor()
+    {
+        // The roster label is already in cutter mode and the child label is in
+        // tear-off. ZPL takes the last command, so appending settles it either
+        // way without having to find and remove the original.
+        var child = Encoding.Latin1.GetString(
+            ZplTemplate.AmendForCutter( DemoTemplate( "Demo-Child-Label.zpl" ), cut: true ) );
+
+        Assert.Contains( "^MMT", child, StringComparison.Ordinal );
+        Assert.EndsWith( "^MMC^XZ\r\n", child, StringComparison.Ordinal );
+
+        var roster = Encoding.Latin1.GetString(
+            ZplTemplate.AmendForCutter( DemoTemplate( "Demo-Roster-Label.zpl" ), cut: false ) );
+
+        Assert.Contains( "^MMC", roster, StringComparison.Ordinal );
+        Assert.EndsWith( "^XB^XZ\r\n", roster, StringComparison.Ordinal );
+    }
+
+    [Fact]
+    public void AmendForCutter_LeavesSomethingWithNoEndAlone()
+    {
+        var notALabel = Latin1( "this is not a label" );
+
+        Assert.Equal( notALabel, ZplTemplate.AmendForCutter( notALabel, cut: true ) );
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static byte[] DemoTemplate( string resource )

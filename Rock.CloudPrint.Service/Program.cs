@@ -724,6 +724,7 @@ public class Program
                 CodeLength = request.CodeLength ?? SecurityCode.DefaultLength,
                 Start = request.Start,
                 Prefix = ( request.Prefix ?? string.Empty ).Trim(),
+                HasCutter = request.HasCutter ?? false,
                 IsTestCopy = request.Test ?? false
             } );
 
@@ -971,6 +972,7 @@ internal record BlankPrintRequest(
     int? CodeLength,
     string? Start,
     string? Prefix,
+    bool? HasCutter,
     bool? Test );
 
 /// <summary>

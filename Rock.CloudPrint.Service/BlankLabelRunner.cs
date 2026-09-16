@@ -43,6 +43,18 @@ internal sealed record BlankRunRequest
     public string Prefix { get; init; } = string.Empty;
 
     /// <summary>
+    /// Whether the printer has a cutter fitted.
+    ///
+    /// <para>
+    /// When it has, the proxy decides where the cuts fall rather than leaving
+    /// it to whatever the template happens to say - one cut after each copy, so
+    /// a set of labels for one child comes off together. Rock has the same
+    /// setting on a printer device and does the same thing with it.
+    /// </para>
+    /// </summary>
+    public bool HasCutter { get; init; }
+
+    /// <summary>
     /// One copy with a recognisable code, to prove the printer and the stock.
     /// It takes the same route a real run takes, so it proves the route as
     /// well, and it does not move the sequential counter.
@@ -398,12 +410,23 @@ internal sealed class BlankLabelRunner
             {
                 run.Token.ThrowIfCancellationRequested();
 
-                foreach ( var template in run.Templates )
+                for ( var label = 0; label < run.Templates.Count; label++ )
                 {
                     // Resolved here rather than up front so a stack of a
                     // thousand costs one label's worth of memory rather than a
                     // thousand. The template bytes behind it were read once.
-                    await stream.WriteAsync( ZplTemplate.Resolve( template.Content, run.Codes[copy] ), run.Token );
+                    var bytes = ZplTemplate.Resolve( run.Templates[label].Content, run.Codes[copy] );
+
+                    if ( run.Request.HasCutter )
+                    {
+                        // The cut falls after the last label of each copy, so a
+                        // child's tag, the parent's receipt and the roster label
+                        // come off as one piece. Every earlier label in the copy
+                        // suppresses the cut instead.
+                        bytes = ZplTemplate.AmendForCutter( bytes, label == run.Templates.Count - 1 );
+                    }
+
+                    await stream.WriteAsync( bytes, run.Token );
                 }
 
                 run.RecordCopyHandedOver();

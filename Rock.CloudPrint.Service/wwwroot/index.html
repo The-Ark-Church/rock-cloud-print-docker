@@ -353,9 +353,17 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div class="col-span-2">
                     <label class="block text-xs font-medium text-gray-600 mb-1">Printer</label>
-                    <input id="blank-address" type="text" placeholder="192.168.1.50"
-                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <div class="flex items-center gap-3">
+                        <input id="blank-address" type="text" placeholder="192.168.1.50"
+                            class="flex-1 min-w-0 border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer whitespace-nowrap"
+                            title="Cuts after the last label of each copy, so one copy comes off together. The proxy sends the cut command itself, so the label does not have to carry one.">
+                            <input id="blank-cutter" type="checkbox" onchange="saveBlankPrefs()"
+                                class="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Has cutter
+                        </label>
+                    </div>
                 </div>
 
                 <div>
@@ -1337,7 +1345,8 @@
                 localStorage.setItem( BLANK_PREFS, JSON.stringify( {
                     order:   blankOrder,
                     picked:  [...blankPicked],
-                    address: document.getElementById( 'blank-address' ).value.trim()
+                    address: document.getElementById( 'blank-address' ).value.trim(),
+                    cutter:  document.getElementById( 'blank-cutter' ).checked
                 } ) );
             } catch ( e ) { /* private browsing, or a full quota. Not worth a message. */ }
         }
@@ -1411,6 +1420,7 @@
                 blankPicked = new Set( Array.isArray( prefs.picked ) ? prefs.picked : [] );
                 const address = document.getElementById( 'blank-address' );
                 if ( prefs.address && !address.value ) address.value = prefs.address;
+                document.getElementById( 'blank-cutter' ).checked = !!prefs.cutter;
                 blankRestored = true;
             }
 
@@ -1858,6 +1868,7 @@
                 quantity:   parseInt( document.getElementById( 'blank-quantity' ).value, 10 ) || 0,
                 codeLength: parseInt( document.getElementById( 'blank-length' ).value, 10 ) || 3,
                 prefix:     document.getElementById( 'blank-prefix' ).value.trim(),
+                hasCutter:  document.getElementById( 'blank-cutter' ).checked,
                 test:       !!isTest
             };
             if ( start ) body.start = start;
