@@ -27,10 +27,15 @@ This is commonly used for check-in label printing where the printers are on a lo
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-plugin
+sudo apt-get install -y docker.io docker-compose-v2
 sudo systemctl enable --now docker
 sudo usermod -aG docker $USER   # lets you run docker without sudo (re-login after)
 ```
+
+`docker-compose-v2` is Ubuntu's package for Compose v2 — the same `docker compose`
+command. The name `docker-compose-plugin` you will see elsewhere only resolves if
+you have added Docker's own apt repository first, and fails on a stock Ubuntu with
+`Unable to locate package`.
 
 ---
 
