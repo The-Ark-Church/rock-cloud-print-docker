@@ -455,8 +455,15 @@ A blank's code colliding with a real one Rock issued is not a problem in
 practice: the parent is holding the matching half and the handwritten names
 differ, so a volunteer sees the mismatch.
 
-A security code is printed large enough to read at a glance, so more than five
-or six characters rarely fits. Use the preview to check before printing a run.
+A security code is printed large enough to read at a glance, so how many
+characters fit is decided by the label, not by this setting. **The three demo
+templates are designed for three**, which is the common case. Longer codes are
+clipped rather than shrunk, so check before committing to a run — the preview
+draws a real code, and **Print one test copy** prints W repeated to your chosen
+length, W being the widest character a code can contain.
+
+If you want longer codes, that is a change to the label rather than to the
+proxy: upload your own template with the field laid out for it.
 
 ### "Handed to the printer" is not "printed"
 

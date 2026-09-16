@@ -250,7 +250,9 @@ Put anything in cutter mode (`^MMC`) last in the order, or the cut lands in the
 middle of a copy.
 
 **Codes** are random from an alphabet with no `0`, `O`, `1` or `I`, or
-sequential. Sequential numbering is remembered between runs, so two batches
+sequential. How many characters fit is decided by the label — the three demo
+templates are designed for three. Longer codes are clipped rather than shrunk,
+so preview first, or upload a template laid out for more. Sequential numbering is remembered between runs, so two batches
 printed months apart cannot carry the same codes. Codes are reserved before
 anything is sent, so a failed run leaves a gap in the numbering rather than
 repeating itself later.
