@@ -48,7 +48,7 @@ internal static class SecurityCode
     /// <summary>
     /// A security code is printed large enough to read at a glance from a
     /// couple of feet away, so on an ordinary label five or six characters is
-    /// already the practical ceiling. The Ark uses three. Eight is past
+    /// already the practical ceiling, and three is typical. Eight is past
     /// anything that would fit and is here to stop a typo, not to ration.
     /// </summary>
     public const int MaxLength = 8;

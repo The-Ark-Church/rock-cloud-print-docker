@@ -19,7 +19,7 @@ public class LabelStoreTests : IDisposable
     /// The exact bytes of the three demo templates, pinned.
     ///
     /// <para>
-    /// These are hashes of the real templates The Ark prints its blanks from.
+    /// These are hashes of the templates that ship with the proxy.
     /// They are pinned rather than recomputed because the two ways this can go
     /// wrong are both silent: the build could alter a file on its way into the
     /// assembly, or somebody could edit a template without realising it is the
@@ -52,7 +52,7 @@ public class LabelStoreTests : IDisposable
 
     [Theory]
     [InlineData( "Demo-Child-Label" )]
-    [InlineData( "Ark Child 3x2" )]
+    [InlineData( "Child Label 3x2" )]
     [InlineData( "a" )]
     [InlineData( "label.v2" )]
     [InlineData( "under_score" )]

@@ -88,8 +88,8 @@ internal sealed record BlankRunStatus
 /// Prints stacks of blank labels.
 ///
 /// <para>
-/// The shape of a run is taken from the tool this replaces, which has printed
-/// The Ark's blanks for years: open one socket to the printer, send the
+/// The shape of a run is taken from the Windows tool this replaces, which has
+/// printed real stacks for years: open one socket to the printer, send the
 /// resolved bytes for each label of each copy in order, close. It never
 /// touches <c>^PQ</c> and never touches a cut command, and neither does this -
 /// raising the quantity command instead of repeating the label would print N
@@ -126,7 +126,7 @@ internal sealed class BlankLabelRunner
     /// An upper bound on how many labels can make up one copy. Not a rule
     /// about sets - it is there because every template in a copy is held in
     /// memory for the length of the run, and a request is caller-supplied.
-    /// Three is what The Ark uses.
+    /// Three labels to a copy is typical.
     /// </summary>
     public const int MaxLabelsPerCopy = 100;
 

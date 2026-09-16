@@ -131,7 +131,13 @@ environment:
 
 ## PIN / password protection
 
-The web UI is open by default. To require a login:
+The web UI is open by default. **Set a PIN.** Anyone who can reach port 8080 can
+change every setting, and can upload a label and print it to any address they
+choose — which means the port offers a way to send arbitrary bytes to any host
+and port on your network. That is inherent to what a print proxy does, but it
+makes the PIN worth setting even on a network you trust.
+
+To require a login:
 
 - **Via web UI:** Settings → Security → Set PIN
 - **Via env var:** Add `- Password=mypin` to your `docker-compose.yml` environment block
@@ -215,9 +221,54 @@ Settings are stored in the `config/` directory outside the container and are una
 | Dashboard | Connection status, uptime, labels printed counter |
 | Logs | Live service log (last 300 entries), color-coded by level |
 | Printers | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
+| Blank Labels | Store ZPL templates and print stacks of pre-coded blank check-in labels. Works with Rock unreachable — see below |
 | Settings → Connection | Rock server URL, Proxy ID, Proxy Name |
 | Settings → Notifications | Tell Rock when a printer fails. Needs Rock-side setup first — see below |
 | Settings → Security | Set, change, or remove web UI PIN |
+
+---
+
+## Blank labels
+
+When check-in goes down, families fill in labels by hand — which only works if a
+stack of pre-printed blanks already exists. Each blank carries a **security
+code**, the same one on the child's tag and the parent's receipt, so pickup
+still matches when the names are handwritten.
+
+The **Blank Labels** tab prints that stack. **It needs nothing from the Rock
+server, and that is the point** — the proxy already holds the templates and
+already talks to the printers, so it still works when Rock does not. Print the
+stack in advance, not during the outage.
+
+Three demo templates are included, so there is something to print on a fresh
+install. They can be deleted, and downloaded again from the repository.
+
+**A label** is a ZPL file with `???` where the code goes. Write it anywhere that
+produces ZPL and upload it. The label's size is fixed in the file by `^PW` and
+`^LL`, so load the stock that matches — the size is shown beside each label.
+Put anything in cutter mode (`^MMC`) last in the order, or the cut lands in the
+middle of a copy.
+
+**Codes** are random from an alphabet with no `0`, `O`, `1` or `I`, or
+sequential. Sequential numbering is remembered between runs, so two stacks
+printed months apart cannot carry the same codes. Codes are reserved before
+anything is sent, so a failed run leaves a gap in the numbering rather than
+repeating itself later.
+
+**A few things worth knowing:**
+
+- Choose a printer that is not serving check-in. Nothing stops two things
+  printing to the same printer at once.
+- The run counts copies *handed to the printer*, not printed. A completed
+  network write only means the bytes were accepted.
+- There is no time limit on a run. A printer out of labels pauses and carries on
+  when reloaded, so a slow run is usually waiting for paper. **Cancel** is the
+  only thing that ends one early.
+- The preview is drawn by [Labelary](https://labelary.com/), so that one button
+  needs internet access. Printing does not.
+
+Templates are stored in `config/labels/`, and the record of used codes in
+`config/blank-labels.json` — both inside the folder you already back up.
 
 ---
 
