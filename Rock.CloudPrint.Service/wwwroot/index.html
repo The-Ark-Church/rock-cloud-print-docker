@@ -240,11 +240,64 @@
                         class="h-4 w-4 rounded-full border border-gray-300 text-gray-400 text-xs leading-none
                                hover:border-gray-500 hover:text-gray-700">?</button>
                 </div>
-                <label class="text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer">
-                    Upload
-                    <input id="label-upload" type="file" accept=".zpl,.prn,.txt"
-                           class="hidden" onchange="uploadLabel(event)">
-                </label>
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleCapture()"
+                        class="text-sm font-medium text-blue-600 hover:text-blue-700">Capture from Rock</button>
+                    <label class="text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer">
+                        Upload
+                        <input id="label-upload" type="file" accept=".zpl,.prn,.txt"
+                               class="hidden" onchange="uploadLabel(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Capture ───────────────────────────────────────────────────
+                 Rock will not hand out the ZPL for a label designed in its own
+                 designer, but the proxy is in the middle of every print. This
+                 waits for one, by being an ordinary printer. -->
+            <div id="capture-panel" class="hidden mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 space-y-2">
+                <p>
+                    For a label you designed <strong>as a blank</strong> in Rock — with lines to write
+                    on and a placeholder where the code goes. A normal check-in label will not work:
+                    blanking one leaves empty space with nothing to say what goes where.
+                </p>
+                <p>
+                    Point a Device in Rock at
+                    <code id="capture-address" class="bg-white px-1 rounded border border-gray-200">this proxy</code>
+                    and print one label to it. Capture stops after one.
+                </p>
+
+                <div class="flex items-center gap-2">
+                    <label class="text-gray-500">Port</label>
+                    <input id="capture-port" type="number" min="1" max="65535" value="9101"
+                        class="w-20 border border-gray-300 rounded px-2 py-1 text-xs tabular-nums
+                               focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    <button id="capture-arm-btn" onclick="armCapture()"
+                        class="px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded
+                               hover:bg-blue-700">Wait for a label</button>
+                    <button id="capture-stop-btn" onclick="disarmCapture()"
+                        class="hidden px-2.5 py-1 bg-white border border-gray-300 text-gray-700 text-xs
+                               font-medium rounded hover:bg-gray-50">Stop</button>
+                    <span id="capture-state" class="text-gray-500"></span>
+                </div>
+
+                <div id="capture-result" class="hidden border-t border-gray-200 pt-2 space-y-2">
+                    <p class="text-gray-700">Which field holds the security code?</p>
+                    <div id="capture-fields" class="space-y-1"></div>
+                    <div class="flex items-center gap-2">
+                        <input id="capture-name" type="text" placeholder="Name this label" maxlength="64"
+                            class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs
+                                   focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        <button onclick="saveCapture()"
+                            class="px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded
+                                   hover:bg-blue-700">Save</button>
+                        <button onclick="discardCapture()"
+                            class="px-2.5 py-1 bg-white border border-gray-300 text-gray-700 text-xs
+                                   font-medium rounded hover:bg-gray-50">Discard</button>
+                    </div>
+                </div>
+
+                <div id="capture-message" class="hidden rounded p-2"></div>
             </div>
 
             <div id="label-help" class="hidden mt-3 rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-2">
@@ -1370,6 +1423,144 @@
                         'class="px-1 text-sm leading-none text-gray-300 hover:text-red-600">&times;</button>' +
                 '</div>';
             } ).join( '' );
+        }
+
+        // ── Capturing a label from Rock ───────────────────────────────────
+
+        let capturePollTimer = null;
+
+        function toggleCapture() {
+            const panel = document.getElementById( 'capture-panel' );
+            panel.classList.toggle( 'hidden' );
+
+            if ( !panel.classList.contains( 'hidden' ) ) {
+                document.getElementById( 'capture-address' ).textContent =
+                    location.hostname + ':' + ( document.getElementById( 'capture-port' ).value || '9101' );
+                refreshCapture();
+            } else {
+                stopCapturePolling();
+            }
+        }
+
+        function showCaptureMessage( kind, html ) {
+            showBoxMessage( 'capture-message', kind, html, '' );
+        }
+
+        function hideCaptureMessage() {
+            document.getElementById( 'capture-message' ).classList.add( 'hidden' );
+        }
+
+        async function armCapture() {
+            hideCaptureMessage();
+
+            const port = parseInt( document.getElementById( 'capture-port' ).value, 10 ) || 9101;
+
+            try {
+                const resp = await authFetch( '/api/labels/capture/arm', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { port } )
+                } );
+                const data = await resp.json();
+
+                if ( !resp.ok ) { showCaptureMessage( 'bad', escHtml( data.error || 'Could not start waiting.' ) ); return; }
+
+                document.getElementById( 'capture-address' ).textContent = location.hostname + ':' + port;
+                renderCapture( data );
+                startCapturePolling();
+            } catch ( e ) { /* handled */ }
+        }
+
+        async function disarmCapture() { await captureAction( '/api/labels/capture/disarm' ); }
+        async function discardCapture() { await captureAction( '/api/labels/capture/discard' ); }
+
+        async function captureAction( url ) {
+            hideCaptureMessage();
+            try {
+                const resp = await authFetch( url, { method: 'POST' } );
+                renderCapture( await resp.json() );
+            } catch ( e ) { /* handled */ }
+        }
+
+        async function refreshCapture() {
+            try {
+                const resp = await authFetch( '/api/labels/capture' );
+                if ( resp.ok ) renderCapture( await resp.json() );
+            } catch ( e ) { stopCapturePolling(); }
+        }
+
+        function startCapturePolling() {
+            if ( capturePollTimer ) return;
+            capturePollTimer = setInterval( refreshCapture, 1000 );
+        }
+
+        function stopCapturePolling() {
+            if ( !capturePollTimer ) return;
+            clearInterval( capturePollTimer );
+            capturePollTimer = null;
+        }
+
+        function renderCapture( data ) {
+            const waiting  = data.state === 'waiting';
+            const captured = data.state === 'captured';
+
+            document.getElementById( 'capture-arm-btn'  ).classList.toggle( 'hidden', waiting );
+            document.getElementById( 'capture-stop-btn' ).classList.toggle( 'hidden', !waiting );
+            document.getElementById( 'capture-result'   ).classList.toggle( 'hidden', !captured );
+
+            const state = document.getElementById( 'capture-state' );
+            if ( waiting )       state.textContent = 'waiting on port ' + data.port + '\u2026';
+            else if ( captured ) state.textContent = data.bytes + ' bytes from ' + ( data.from || 'the proxy' );
+            else                 state.textContent = '';
+
+            if ( data.error ) showCaptureMessage( 'bad', escHtml( data.error ) );
+
+            if ( !captured ) { if ( !waiting ) stopCapturePolling(); return; }
+
+            stopCapturePolling();
+
+            // The fields as they were printed. Which one is the code is a
+            // decision only whoever designed the label can make, so it is
+            // shown rather than guessed at.
+            document.getElementById( 'capture-fields' ).innerHTML = data.fields.length
+                ? data.fields.map( ( f, i ) =>
+                    '<label class="flex items-center gap-2 cursor-pointer">' +
+                        '<input type="radio" name="capture-field" value="' + i + '"' +
+                            ( i === 0 ? ' checked' : '' ) +
+                            ' class="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500">' +
+                        '<code class="bg-white px-1 rounded border border-gray-200">' + escHtml( f ) + '</code>' +
+                    '</label>' ).join( '' )
+                : '<p class="text-red-700">No printable fields were found in that label.</p>';
+
+            captureFields = data.fields;
+        }
+
+        let captureFields = [];
+
+        async function saveCapture() {
+            hideCaptureMessage();
+
+            const chosen = document.querySelector( 'input[name="capture-field"]:checked' );
+            const name   = document.getElementById( 'capture-name' ).value.trim();
+
+            if ( !chosen ) { showCaptureMessage( 'bad', 'Choose which field holds the security code.' ); return; }
+            if ( !name )   { showCaptureMessage( 'bad', 'Give the label a name.' ); return; }
+
+            try {
+                const resp = await authFetch( '/api/labels/capture/save', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { name, placeholder: captureFields[parseInt( chosen.value, 10 )] } )
+                } );
+                const data = await resp.json();
+
+                if ( !resp.ok ) { showCaptureMessage( 'bad', escHtml( data.error || 'That label was not saved.' ) ); return; }
+
+                showCaptureMessage( 'ok', 'Saved <strong>' + escHtml( data.name ) + '</strong>.' );
+                document.getElementById( 'capture-name' ).value = '';
+                await refreshCapture();
+                await loadLabels();
+            } catch ( e ) { /* handled */ }
         }
 
         function toggleLabelHelp() {

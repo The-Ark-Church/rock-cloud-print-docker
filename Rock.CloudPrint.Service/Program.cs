@@ -73,6 +73,7 @@ public class Program
         builder.Services.AddSingleton<LabelStore>();
         builder.Services.AddSingleton<BlankLabelStateStore>();
         builder.Services.AddSingleton<BlankLabelRunner>();
+        builder.Services.AddSingleton<LabelCapture>();
 
         builder.Services.AddHttpClient( "labelary" );
         builder.Services.AddSingleton<LabelPreview>();
@@ -803,6 +804,84 @@ public class Program
                 : Results.Json( new { error = "There is no run with that id still going." }, statusCode: 404 );
         } );
 
+        // ── Capturing a label from Rock ────────────────────────────────────
+        // Rock will not hand out the ZPL for a label designed in its own
+        // designer, but the proxy is in the middle of every print, so a label
+        // Rock prints arrives here as raw ZPL whatever it was authored as.
+        // Capture works by being an ordinary printer: point a Device in Rock at
+        // this proxy and the capture port, and print to it. Nothing in the
+        // print path changes, or knows.
+
+        app.MapPost( "/api/labels/capture/arm", ( CaptureArmRequest request, LabelCapture capture ) =>
+        {
+            var error = capture.Arm( request.Port ?? LabelCapture.DefaultPort );
+
+            return error == null
+                ? Results.Json( capture.Snapshot(), statusCode: 202 )
+                : Results.Json( new { error }, statusCode: 409 );
+        } );
+
+        app.MapGet( "/api/labels/capture", ( LabelCapture capture ) => Results.Ok( capture.Snapshot() ) );
+
+        app.MapPost( "/api/labels/capture/disarm", ( LabelCapture capture ) =>
+        {
+            capture.Disarm();
+
+            return Results.Ok( capture.Snapshot() );
+        } );
+
+        app.MapPost( "/api/labels/capture/discard", ( LabelCapture capture ) =>
+        {
+            capture.Discard();
+
+            return Results.Ok( capture.Snapshot() );
+        } );
+
+        // Saves what was captured as a template, with the designer's own
+        // placeholder marked as the security code position.
+        app.MapPost( "/api/labels/capture/save", ( CaptureSaveRequest request, LabelCapture capture, LabelStore labels ) =>
+        {
+            var captured = capture.Captured;
+
+            if ( captured == null )
+                return Results.Json( new { error = "There is nothing captured to save." }, statusCode: 409 );
+
+            var name = ( request.Name ?? string.Empty ).Trim();
+            var placeholder = request.Placeholder ?? string.Empty;
+
+            if ( !LabelStore.IsValidName( name ) )
+                return Results.Json( new { error = $"A label name can be up to {LabelStore.MaxNameLength} letters, digits, spaces, dots, dashes and underscores." }, statusCode: 400 );
+
+            if ( placeholder.Length == 0 )
+                return Results.Json( new { error = "Choose which field holds the security code." }, statusCode: 400 );
+
+            var template = ZplTemplate.MarkCodePlaceholder( captured, placeholder );
+
+            var outcome = labels.Save( name, template );
+
+            if ( outcome == LabelSaveOutcome.Saved )
+            {
+                capture.Discard();
+
+                return Results.Ok( new { name, bytes = template.Length } );
+            }
+
+            return outcome switch
+            {
+                LabelSaveOutcome.AlreadyExists => Results.Json(
+                    new { error = $"There is already a label called \'{name}\'. Delete that one first, or use another name." }, statusCode: 409 ),
+                LabelSaveOutcome.NoCodeToken => Results.Json( new
+                {
+                    error = "That placeholder was not found in a printable field, so the saved label would have nowhere to put a security code."
+                }, statusCode: 400 ),
+                LabelSaveOutcome.NotZpl => Results.Json(
+                    new { error = "What was captured does not look like ZPL." }, statusCode: 400 ),
+                LabelSaveOutcome.TooLarge => Results.Json(
+                    new { error = "That label is too large." }, statusCode: 400 ),
+                _ => Results.Json( new { error = "That label could not be stored." }, statusCode: 400 )
+            };
+        } );
+
         app.MapPost( "/api/restart", ( IHostApplicationLifetime lifetime ) =>
         {
             // Delay slightly so the HTTP response is fully sent before shutdown begins.
@@ -869,6 +948,16 @@ internal record LabelUploadRequest( string? Name, string? ContentBase64 );
 /// text onto a label.
 /// </summary>
 internal record LabelPreviewRequest( string[]? Names, string? Mode, int? CodeLength, string? Start, string? Prefix );
+
+/// <summary>Which port to wait on for a label from Rock.</summary>
+internal record CaptureArmRequest( int? Port );
+
+/// <summary>
+/// Saving a captured label. <c>Placeholder</c> is the text its designer put in
+/// the security code field, chosen from the fields the capture found rather
+/// than typed from memory.
+/// </summary>
+internal record CaptureSaveRequest( string? Name, string? Placeholder );
 
 internal record BlankPrintRequest(
     string? Address,

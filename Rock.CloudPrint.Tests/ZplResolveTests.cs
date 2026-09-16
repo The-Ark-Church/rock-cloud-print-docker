@@ -149,6 +149,59 @@ public class ZplResolveTests
         Assert.Equal( template, ZplTemplate.Resolve( template, "ABC" ) );
     }
 
+    [Fact]
+    public void MarkCodePlaceholder_TurnsACapturedLabelIntoATemplate()
+    {
+        // What capture produces: a label Rock printed, carrying whatever
+        // placeholder its designer put in the security code field.
+        var captured = Latin1( "^XA^FT1,1^A0N,135,134^FDWWW^FS^FT4,200^FDName^FS^XZ" );
+
+        Assert.Equal( Latin1( "^XA^FT1,1^A0N,135,134^FD???^FS^FT4,200^FDName^FS^XZ" ),
+                      ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+    }
+
+    [Fact]
+    public void MarkCodePlaceholder_LeavesEverythingOutsideADataFieldAlone()
+    {
+        // WWW appearing in a command is not a field, and rewriting it would
+        // corrupt the label.
+        var captured = Latin1( "^XA^FXWWW note^FS^FDWWW^FS^XZ" );
+
+        Assert.Equal( Latin1( "^XA^FXWWW note^FS^FD???^FS^XZ" ),
+                      ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+    }
+
+    [Fact]
+    public void MarkCodePlaceholder_MarksEveryFieldHoldingIt()
+    {
+        // A receipt torn in half carries the code on both halves.
+        var captured = Latin1( "^XA^FDWWW^FS^FDWWW^FS^XZ" );
+
+        Assert.Equal( Latin1( "^XA^FD???^FS^FD???^FS^XZ" ),
+                      ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+    }
+
+    [Fact]
+    public void MarkCodePlaceholder_LeavesALabelAloneWhenThePlaceholderIsNotThere()
+    {
+        // The save then fails validation for having nowhere to put a code,
+        // which is a better answer than silently storing something unusable.
+        var captured = Latin1( "^XA^FDName^FS^XZ" );
+
+        Assert.Equal( captured, ZplTemplate.MarkCodePlaceholder( captured, "NOTHERE" ) );
+        Assert.False( ZplTemplate.ContainsCodeToken( ZplTemplate.MarkCodePlaceholder( captured, "NOTHERE" ) ) );
+    }
+
+    [Fact]
+    public void MarkCodePlaceholder_SurvivesAHighByteLabel()
+    {
+        var high = new byte[] { 0x80, 0xA9, 0xFF };
+        var captured = Concat( Latin1( "^XA^GFA," ), high, Latin1( "^FS^FDWWW^FS^XZ" ) );
+        var expected = Concat( Latin1( "^XA^GFA," ), high, Latin1( "^FS^FD???^FS^XZ" ) );
+
+        Assert.Equal( expected, ZplTemplate.MarkCodePlaceholder( captured, "WWW" ) );
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static byte[] DemoTemplate( string resource )

@@ -147,6 +147,47 @@ internal static class ZplTemplate
     }
 
     /// <summary>
+    /// Turns a captured label into a template, by replacing the placeholder its
+    /// designer put in the security code field with the token this understands.
+    ///
+    /// <para>
+    /// Only inside <c>^FD…^FS</c>, and only that exact text, for the same
+    /// reason substitution is: a label is the designer's, and nothing outside
+    /// the field being marked should move. If the placeholder also appears as
+    /// static text elsewhere in a data field it is replaced there too, which is
+    /// why the person capturing picks the value rather than typing a guess.
+    /// </para>
+    /// </summary>
+    /// <param name="content">The captured label.</param>
+    /// <param name="placeholder">The text standing in for the security code.</param>
+    public static byte[] MarkCodePlaceholder( ReadOnlySpan<byte> content, string placeholder )
+    {
+        if ( string.IsNullOrEmpty( placeholder ) )
+        {
+            return content.ToArray();
+        }
+
+        var text = ByteEncoding.GetString( content );
+        var builder = new StringBuilder( text.Length + 16 );
+        var copied = 0;
+
+        foreach ( var field in DataFields( text ) )
+        {
+            builder.Append( text, copied, field.Start - copied );
+
+            builder.Append( text.AsSpan( field.Start, field.Length )
+                                .ToString()
+                                .Replace( placeholder, CodeToken, StringComparison.Ordinal ) );
+
+            copied = field.Start + field.Length;
+        }
+
+        builder.Append( text, copied, text.Length - copied );
+
+        return ByteEncoding.GetBytes( builder.ToString() );
+    }
+
+    /// <summary>
     /// The last <c>^XA…^XZ</c> format in the template, or the whole thing if
     /// there is not a complete one.
     ///
