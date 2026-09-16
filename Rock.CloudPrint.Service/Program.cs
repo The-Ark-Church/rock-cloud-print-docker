@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -41,6 +41,13 @@ public class Program
     /// <summary>Longest string accepted as a notification webhook URL.</summary>
     private const int MaxNotificationUrlLength = 500;
 
+    /// <summary>
+    /// Longest base64 string accepted for an uploaded label, checked before it
+    /// is decoded rather than after. Base64 costs four characters for every
+    /// three bytes, and the slack covers any line breaks the encoder added.
+    /// </summary>
+    private const int MaxLabelUploadCharacters = ( LabelStore.MaxContentBytes / 3 + 1 ) * 4 + 1024;
+
     public static void Main( string[] args )
     {
         var builder = WebApplication.CreateBuilder( args );
@@ -57,6 +64,7 @@ public class Program
         builder.Services.AddSingleton<ProxyStatus>();
         builder.Services.AddSingleton<PrintMetrics>();
         builder.Services.AddSingleton<PrinterTester>();
+        builder.Services.AddSingleton<LabelStore>();
         builder.Services.AddSingleton<AuthService>();
 
         // Redirects are NOT followed: a URL matching no webhook in Rock redirects
@@ -112,6 +120,12 @@ public class Program
         builder.Configuration.AddJsonFile( "config/appsettings.json", optional: true, reloadOnChange: true );
 
         var app = builder.Build();
+
+        // On a genuinely first run this creates config/labels and writes the
+        // demo templates. It swallows its own failures: an unwritable config
+        // mount is a reason to have no demo labels, not a reason for the proxy
+        // not to start.
+        app.Services.GetRequiredService<LabelStore>().SeedIfFirstRun();
 
         app.UseRateLimiter();
 
@@ -483,6 +497,74 @@ public class Program
             } );
         } ).RequireRateLimiting( "printertest" );
 
+        // ── Blank labels ───────────────────────────────────────────────────
+        // The stored ZPL templates that blank check-in labels are printed from.
+        // Nothing here touches the Rock server, and that is the point: blanks
+        // exist for the times Rock cannot be reached, so what produces them
+        // must not depend on it.
+
+        app.MapGet( "/api/labels", ( LabelStore labels ) =>
+            Results.Ok( labels.List().Select( label => new
+            {
+                name       = label.Name,
+                bytes      = label.Bytes,
+                modifiedAt = label.ModifiedAt,
+                widthDots  = label.WidthDots,
+                lengthDots = label.LengthDots
+            } ) ) );
+
+        // The template arrives as base64 inside JSON rather than as a multipart
+        // form. A form post would bring .NET's antiforgery validation into play
+        // for no gain, since the bearer token this endpoint already requires is
+        // the defence that matters here.
+        app.MapPost( "/api/labels", ( LabelUploadRequest request, LabelStore labels ) =>
+        {
+            var name = ( request.Name ?? string.Empty ).Trim();
+            var encoded = request.ContentBase64 ?? string.Empty;
+
+            if ( !LabelStore.IsValidName( name ) )
+                return Results.Json( new { error = $"A label name can be up to {LabelStore.MaxNameLength} letters, digits, spaces, dots, dashes and underscores." }, statusCode: 400 );
+
+            // Bounded before decoding rather than after, so an oversized upload
+            // costs a length check instead of a megabyte of allocation.
+            if ( encoded.Length > MaxLabelUploadCharacters )
+                return Results.Json( new { error = "That label is too large." }, statusCode: 400 );
+
+            byte[] content;
+
+            try
+            {
+                content = Convert.FromBase64String( encoded );
+            }
+            catch ( FormatException )
+            {
+                return Results.Json( new { error = "The label content was not valid base64." }, statusCode: 400 );
+            }
+
+            return labels.Save( name, content ) switch
+            {
+                LabelSaveOutcome.Saved => Results.Ok( new { name, bytes = content.Length } ),
+                LabelSaveOutcome.AlreadyExists => Results.Json( new { error = $"There is already a label called '{name}'. Delete that one first, or use another name." }, statusCode: 409 ),
+                LabelSaveOutcome.TooLarge => Results.Json( new { error = "That label is too large." }, statusCode: 400 ),
+                LabelSaveOutcome.NotZpl => Results.Json( new { error = "That does not look like ZPL. A label should contain ^XA and ^XZ." }, statusCode: 400 ),
+                LabelSaveOutcome.NoCodeToken => Results.Json( new { error = $"That label has no {ZplTemplate.CodeToken} inside a ^FD field, so there is nowhere to put the security code." }, statusCode: 400 ),
+                _ => Results.Json( new { error = "That label could not be stored." }, statusCode: 400 )
+            };
+        } );
+
+        app.MapDelete( "/api/labels/{name}", ( string name, LabelStore labels ) =>
+        {
+            // The route value is checked exactly as an uploaded name is. A route
+            // segment is every bit as much caller-supplied input as a body, and
+            // it is the one people forget.
+            if ( !LabelStore.IsValidName( name ) )
+                return Results.Json( new { error = "That is not a label name." }, statusCode: 400 );
+
+            return labels.Delete( name )
+                ? Results.Ok( new { deleted = name } )
+                : Results.Json( new { error = $"There is no label called '{name}'." }, statusCode: 404 );
+        } );
+
         app.MapPost( "/api/restart", ( IHostApplicationLifetime lifetime ) =>
         {
             // Delay slightly so the HTTP response is fully sent before shutdown begins.
@@ -527,6 +609,13 @@ internal record SettingsRequest( string Url, string Name, string Id );
 internal record LoginRequest( string Password );
 internal record SecurityRequest( string? CurrentPassword, string? NewPassword );
 internal record PrinterTestRequest( string? Address, string? Mode );
+
+/// <summary>
+/// A label template being uploaded. The content is base64 so that arbitrary
+/// bytes survive the trip - a template can legitimately contain <c>^GF</c>
+/// graphics and text that is not valid UTF-8.
+/// </summary>
+internal record LabelUploadRequest( string? Name, string? ContentBase64 );
 
 /// <summary>
 /// Notification settings from the web UI. <c>Secret</c> is null when the caller

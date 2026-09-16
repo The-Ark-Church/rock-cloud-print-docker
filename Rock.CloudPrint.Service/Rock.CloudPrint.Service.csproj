@@ -19,6 +19,16 @@
   </ItemGroup>
 
   <!--
+    The demo label templates, compiled in so a first run has something to print
+    without fetching anything. LogicalName strips the namespace and folder so
+    the resource is named exactly as the label will be - Demo-Child-Label.zpl -
+    and the seeding code needs no knowledge of how MSBuild builds a name.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Labels\*.zpl" LogicalName="%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!--
     Everything in this assembly is internal, and should stay that way - nothing
     outside it is a consumer. This lets the test project see those types without
     widening a single one of them to public. It emits an assembly attribute and
