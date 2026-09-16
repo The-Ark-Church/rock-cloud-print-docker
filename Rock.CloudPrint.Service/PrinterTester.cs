@@ -100,9 +100,10 @@ internal class PrinterTester
 
         try
         {
-            using var socket = new Socket( AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp );
-
-            await socket.ConnectAsync( printerAddress.ToEndPoint(), timeoutSource.Token );
+            // Shared with blank label printing so both open a printer socket
+            // the same way. The print path keeps its own copy on purpose - see
+            // PrinterSocket.
+            using var socket = await PrinterSocket.OpenAsync( printerAddress, timeoutSource.Token );
 
             var bytesSent = 0;
 
