@@ -94,10 +94,19 @@ internal sealed record CaptureSnapshot
 internal sealed class LabelCapture : IDisposable
 {
     /// <summary>
-    /// Not 9100. That is where real printers listen, and on a proxy using the
-    /// host's network taking it would shadow a printer on this machine.
+    /// The raw printing port, because that is what a printer address without a
+    /// port means: Rock sends the address through verbatim and the proxy falls
+    /// back to 9100, so a device pointed at this machine reaches capture with
+    /// nothing extra typed.
+    ///
+    /// <para>
+    /// The obvious objection - that 9100 is where printers listen - does not
+    /// apply. A proxy dials out to printers on 9100; it does not listen on it.
+    /// The port is configurable for the case where something else on the same
+    /// host does.
+    /// </para>
     /// </summary>
-    public const int DefaultPort = 9101;
+    public const int DefaultPort = 9100;
 
     /// <summary>
     /// A label is a few hundred bytes to a few kilobytes. This is the same

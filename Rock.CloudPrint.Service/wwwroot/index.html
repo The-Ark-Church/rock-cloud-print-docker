@@ -257,19 +257,39 @@
                  waits for one, by being an ordinary printer. -->
             <div id="capture-panel" class="hidden mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 space-y-2">
                 <p>
-                    For a label you designed <strong>as a blank</strong> in Rock — with lines to write
-                    on and a placeholder where the code goes. A normal check-in label will not work:
-                    blanking one leaves empty space with nothing to say what goes where.
+                    Rock will not give you the ZPL for a label designed in its own designer. This gets
+                    it by <strong>being a printer</strong>: a print proxy sends the label here as if
+                    this were a Zebra, and this catches it instead of paper coming out.
                 </p>
-                <p>
-                    Point a Device in Rock at
-                    <code id="capture-address" class="bg-white px-1 rounded border border-gray-200">this proxy</code>
-                    and print one label to it. Capture stops after one.
+                <p class="text-gray-500">
+                    For a label you designed <strong>as a blank</strong> — with lines to write on and a
+                    placeholder where the code goes. A normal check-in label will not do: blanking one
+                    leaves empty space with nothing to say what goes where.
                 </p>
 
-                <div class="flex items-center gap-2">
+                <ol class="list-decimal ml-4 space-y-1 text-gray-700">
+                    <li>Press <strong>Wait for a label</strong> below</li>
+                    <li>
+                        In Rock, set a printer's address to
+                        <code id="capture-address" class="bg-white px-1 rounded border border-gray-200">…</code>
+                    </li>
+                    <li>Print one label to it — a check-in label's test print does it</li>
+                    <li>Choose which field holds the security code, give it a name, and save</li>
+                </ol>
+
+                <p class="text-gray-500">
+                    Nothing here needs to be connected to Rock. Whichever proxy Rock already sends that
+                    label to is the one that opens the connection, so <strong>the address only has to be
+                    reachable from that proxy</strong> — it is an ordinary printer address as far as it
+                    is concerned. If that proxy is on another machine or another subnet, the address
+                    above has to be routable from there.
+                </p>
+                <p id="capture-loopback-note" class="text-gray-500"></p>
+
+                <div class="flex items-center gap-2 pt-1">
                     <label class="text-gray-500">Port</label>
-                    <input id="capture-port" type="number" min="1" max="65535" value="9101"
+                    <input id="capture-port" type="number" min="1" max="65535" value="9100"
+                        oninput="updateCaptureAddress()"
                         class="w-20 border border-gray-300 rounded px-2 py-1 text-xs tabular-nums
                                focus:outline-none focus:ring-1 focus:ring-blue-500" />
                     <button id="capture-arm-btn" onclick="armCapture()"
@@ -311,7 +331,8 @@
                     A label is a ZPL file with <code class="bg-white px-1 rounded border border-gray-200">???</code>
                     where the code goes. Tick the ones that make up a copy and use the arrows to order
                     them. <strong>Anything that cuts goes last</strong>, or the cut lands mid-copy.
-                    The size is fixed in the file, so load matching stock.
+                    The size is fixed in the file, so load matching stock, and how many characters a
+                    code can have is fixed in the file too.
                 </p>
                 <p>
                     Pick a printer that is not serving check-in. Sequential codes are remembered
@@ -1427,6 +1448,10 @@
 
         // ── Capturing a label from Rock ───────────────────────────────────
 
+        // Matches LabelCapture.DefaultPort. The raw printing port, so a Rock
+        // device address with no port on it reaches capture unchanged.
+        const LabelCaptureDefaultPort = 9100;
+
         let capturePollTimer = null;
 
         function toggleCapture() {
@@ -1434,12 +1459,26 @@
             panel.classList.toggle( 'hidden' );
 
             if ( !panel.classList.contains( 'hidden' ) ) {
-                document.getElementById( 'capture-address' ).textContent =
-                    location.hostname + ':' + ( document.getElementById( 'capture-port' ).value || '9101' );
+                updateCaptureAddress();
                 refreshCapture();
             } else {
                 stopCapturePolling();
             }
+        }
+
+        // The address is from the point of view of whichever proxy opens the
+        // connection, which is not necessarily this one. The ordinary case is a
+        // production proxy elsewhere sending here as if this were a printer, so
+        // the address it needs is this machine's - the one the browser reached
+        // it on is the best available guess at that. Loopback is offered
+        // alongside for when this proxy is itself the one Rock routes to.
+        function updateCaptureAddress() {
+            const port = document.getElementById( 'capture-port' ).value || '9100';
+            document.getElementById( 'capture-address' ).textContent = location.hostname + ':' + port;
+            document.getElementById( 'capture-loopback-note' ).innerHTML =
+                'If this proxy is itself the one Rock sends the label to, use ' +
+                '<code class="bg-white px-1 rounded border border-gray-200">127.0.0.1:' + port + '</code> ' +
+                'instead — it connects to itself, so nothing crosses a network at all.';
         }
 
         function showCaptureMessage( kind, html ) {
@@ -1453,7 +1492,7 @@
         async function armCapture() {
             hideCaptureMessage();
 
-            const port = parseInt( document.getElementById( 'capture-port' ).value, 10 ) || 9101;
+            const port = parseInt( document.getElementById( 'capture-port' ).value, 10 ) || LabelCaptureDefaultPort;
 
             try {
                 const resp = await authFetch( '/api/labels/capture/arm', {
@@ -1465,7 +1504,7 @@
 
                 if ( !resp.ok ) { showCaptureMessage( 'bad', escHtml( data.error || 'Could not start waiting.' ) ); return; }
 
-                document.getElementById( 'capture-address' ).textContent = location.hostname + ':' + port;
+                updateCaptureAddress();
                 renderCapture( data );
                 startCapturePolling();
             } catch ( e ) { /* handled */ }
