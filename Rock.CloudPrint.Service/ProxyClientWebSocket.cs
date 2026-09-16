@@ -89,10 +89,20 @@ class ProxyClientWebSocket : ProxyWebSocket
             var printResult = await SendPrintDataAsync( printMessage.Address, extraData, cancellationToken );
             var elapsed = Stopwatch.GetElapsedTime( startedAt );
 
-            // Respond first so our own bookkeeping never delays the server.
-            await PostResponseAsync( message, printResult, cancellationToken );
-
-            RecordPrintResult( printMessage.Address, labelCount, printResult, elapsed );
+            try
+            {
+                // Respond first so our own bookkeeping never delays the server.
+                await PostResponseAsync( message, printResult, cancellationToken );
+            }
+            finally
+            {
+                // In a finally because that response write throws when the server
+                // has already aborted the connection - which is exactly when this
+                // attempt most needs recording. Without it such a print was
+                // counted neither as failed nor as slow, so the label total and
+                // the failure total silently disagreed.
+                RecordPrintResult( printMessage.Address, labelCount, printResult, elapsed );
+            }
         }
     }
 
@@ -106,11 +116,25 @@ class ProxyClientWebSocket : ProxyWebSocket
     /// <param name="elapsed">How long the attempt took.</param>
     private void RecordPrintResult( string address, int labelCount, string printResult, TimeSpan elapsed )
     {
-        var printEvent = _metrics.Record( address: address,
-            labelCount: labelCount,
-            reason: printResult,
-            elapsed: elapsed,
-            slowThresholdMilliseconds: _slowPrintMilliseconds );
+        PrintEvent printEvent;
+
+        try
+        {
+            printEvent = _metrics.Record( address: address,
+                labelCount: labelCount,
+                reason: printResult,
+                elapsed: elapsed,
+                slowThresholdMilliseconds: _slowPrintMilliseconds );
+        }
+        catch ( Exception ex )
+        {
+            // Bookkeeping must never take down the receive loop, and - because
+            // this runs in a finally - must never replace the exception that
+            // brought us here.
+            _logger.LogError( ex, "Failed to record the outcome of a print to {address}.", address );
+
+            return;
+        }
 
         if ( !printEvent.ExceededRockTimeout )
         {
