@@ -258,8 +258,11 @@
             <div id="capture-panel" class="hidden mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 space-y-2">
                 <p>
                     Rock will not give you the ZPL for a label designed in its own designer. This gets
-                    it by <strong>being a printer</strong>: a print proxy sends the label here as if
-                    this were a Zebra, and this catches it instead of paper coming out.
+                    it by <strong>being a printer</strong>: Rock sends the label here as if this were a
+                    printer, and this catches it instead of paper coming out. You will need to set up a
+                    new Printer Device in Rock and add this print proxy's IP address to the printer. You
+                    can then use the Label Designer's preview window to "print" to the newly created
+                    printer device you created. That will send it here for capture.
                 </p>
                 <p class="text-gray-500">
                     For a label you designed <strong>as a blank</strong> — with lines to write on and a
@@ -270,10 +273,10 @@
                 <ol class="list-decimal ml-4 space-y-1 text-gray-700">
                     <li>Press <strong>Wait for a label</strong> below</li>
                     <li>
-                        In Rock, set a printer's address to
+                        In Rock, preview a label you created (new designer, or legacy). This proxy is at
                         <code id="capture-address" class="bg-white px-1 rounded border border-gray-200">…</code>
                     </li>
-                    <li>Print one label to it — a check-in label's test print does it</li>
+                    <li>Print a label to the device you created.</li>
                     <li>Choose which field holds the security code, give it a name, and save</li>
                 </ol>
 
@@ -282,7 +285,8 @@
                     label to is the one that opens the connection, so <strong>the address only has to be
                     reachable from that proxy</strong> — it is an ordinary printer address as far as it
                     is concerned. If that proxy is on another machine or another subnet, the address
-                    above has to be routable from there.
+                    above has to be routable from there. Note that this also works with printing from
+                    the Rock server as well. No other print proxy is needed.
                 </p>
                 <p id="capture-loopback-note" class="text-gray-500"></p>
 
@@ -329,11 +333,17 @@
                     nothing from Rock, which is the point.
                 </p>
                 <p>
-                    A label is a ZPL file with <code class="bg-white px-1 rounded border border-gray-200">???</code>
-                    where the code goes. Tick the ones that make up a copy and use the arrows to order
-                    them. <strong>Anything that cuts goes last</strong>, or the cut lands mid-copy.
-                    The size is fixed in the file, so load matching stock, and how many characters a
-                    code can have is fixed in the file too.
+                    A label is a ZPL file. You can create it in the Rock Label designer (Next-Gen or
+                    Legacy), or in any label designer that generates ZPL. Add
+                    <code class="bg-white px-1 rounded border border-gray-200">WWW</code> where the code
+                    goes and it will be replaced with the security code generated here. Upload new ones
+                    here, or use the built in labels. Tick the ones that you want to print as a set and
+                    use the arrows to order them. The size is fixed in the file (your label ZPL), so
+                    load matching label stock in your printer. How many characters a code can have is
+                    fixed in the label you upload so make sure your security code length matches, e.g.
+                    the default labels are set up for a 3 random character security code so setting 3 on
+                    the security code length is correct, any more than that and the characters might not
+                    display.
                 </p>
                 <p>
                     Pick a printer that is not serving check-in. Sequential codes are remembered
@@ -358,7 +368,7 @@
                             class="flex-1 min-w-0 border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
                                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                         <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer whitespace-nowrap"
-                            title="Cuts after the last label of each copy, so one copy comes off together. The proxy sends the cut command itself, so the label does not have to carry one.">
+                            title="Cuts after the last label of each copy, so one copy comes off together. The proxy sends the cut command itself, so the label does not have to carry one. Use this if your printer has a cutter.">
                             <input id="blank-cutter" type="checkbox" onchange="saveBlankPrefs()"
                                 class="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                             Has cutter
@@ -1457,7 +1467,7 @@
 
             if ( !blankOrder.length ) {
                 host.innerHTML = '<p class="py-3 text-xs text-gray-500">' +
-                    'Nothing stored. Upload a ZPL file with <code class="bg-gray-100 px-1 rounded">???</code> ' +
+                    'Nothing stored. Upload a ZPL file with <code class="bg-gray-100 px-1 rounded">WWW</code> ' +
                     'where the security code should go.</p>';
                 return;
             }

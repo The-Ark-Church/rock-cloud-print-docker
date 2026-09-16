@@ -39,6 +39,26 @@ internal static class ZplTemplate
     public const string CodeToken = "???";
 
     /// <summary>
+    /// Also accepted, but only when it is the whole of a field.
+    ///
+    /// <para>
+    /// This is what Rock's own legacy check-in labels use as their security
+    /// code placeholder, so it is what somebody designing a label in Rock
+    /// reaches for. Recognising it means a label authored there works without
+    /// being edited afterwards.
+    /// </para>
+    ///
+    /// <para>
+    /// Whole field only, and that restriction is the point. Three letters are
+    /// far likelier to appear by accident than three question marks - a field
+    /// reading <c>www.example.com</c> would otherwise have a security code
+    /// substituted into the middle of it. Nothing legitimate has a field
+    /// containing only these three letters except a placeholder.
+    /// </para>
+    /// </summary>
+    public const string LegacyCodeToken = "WWW";
+
+    /// <summary>
     /// Latin-1 maps every one of the 256 byte values to exactly one character
     /// and back again, so a template can be searched and edited as text with
     /// no byte altered anywhere the edit did not touch. UTF-8 would not: a
@@ -72,8 +92,7 @@ internal static class ZplTemplate
 
         foreach ( var field in DataFields( text ) )
         {
-            if ( text.AsSpan( field.Start, field.Length )
-                     .Contains( CodeToken, StringComparison.Ordinal ) )
+            if ( IsCodePosition( text.Substring( field.Start, field.Length ) ) )
             {
                 return true;
             }
@@ -117,9 +136,15 @@ internal static class ZplTemplate
             // this one, verbatim.
             builder.Append( text, copied, field.Start - copied );
 
-            builder.Append( text.AsSpan( field.Start, field.Length )
-                                .ToString()
-                                .Replace( CodeToken, code, StringComparison.Ordinal ) );
+            var value = text.Substring( field.Start, field.Length );
+
+            // A field that is nothing but the legacy token is replaced whole.
+            // Anything else has the token substituted where it appears, which
+            // leaves the rest of the field - captions, punctuation, a prefix
+            // somebody typed around it - exactly as written.
+            builder.Append( IsWholeFieldLegacyToken( value )
+                ? code
+                : value.Replace( CodeToken, code, StringComparison.Ordinal ) );
 
             copied = field.Start + field.Length;
         }
@@ -127,6 +152,27 @@ internal static class ZplTemplate
         builder.Append( text, copied, text.Length - copied );
 
         return ByteEncoding.GetBytes( builder.ToString() );
+    }
+
+    /// <summary>
+    /// Whether a field is somewhere a security code goes.
+    /// </summary>
+    private static bool IsCodePosition( string value )
+    {
+        return value.Contains( CodeToken, StringComparison.Ordinal )
+            || IsWholeFieldLegacyToken( value );
+    }
+
+    /// <summary>
+    /// Whether the whole of a field is the legacy token and nothing else.
+    /// </summary>
+    private static bool IsWholeFieldLegacyToken( string value )
+    {
+        // ZPL writes a line break in field data as \&, and a rendered label
+        // can carry one either side of the value, so those come off first.
+        var trimmed = value.Replace( "\\&", string.Empty ).Trim();
+
+        return trimmed.Equals( LegacyCodeToken, StringComparison.Ordinal );
     }
 
     /// <summary>

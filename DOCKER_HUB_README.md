@@ -243,7 +243,7 @@ advance, not during the outage.
 Three demo templates are included, so there is something to print on a fresh
 install. They can be deleted, and downloaded again from the repository.
 
-**A label** is a ZPL file with `???` where the code goes. Write it anywhere that
+**A label** is a ZPL file with `WWW` where the code goes. Write it anywhere that
 produces ZPL and upload it. The label's size is fixed in the file by `^PW` and
 `^LL`, so load the stock that matches — the size is shown beside each label.
 Put anything in cutter mode (`^MMC`) last in the order, or the cut lands in the

@@ -414,14 +414,22 @@ service. Keep it that way.
 
 ### The labels
 
-A label is a ZPL file with `???` wherever the security code should go. The
-proxy stores it and prints it; it does not edit ZPL and has no designer.
+A label is a ZPL file with a placeholder wherever the security code should go.
+The proxy stores it and prints it; it does not edit ZPL and has no designer.
+
+Two placeholders are recognised:
+
+| | |
+|---|---|
+| `WWW` | The same placeholder Rock's own legacy check-in labels use, so a label designed in Rock needs no editing afterwards. Recognised only when it is the **whole** of a field — three letters turn up by accident in a way three question marks do not, and a field reading `www.example.com` should not have a code substituted into the middle of it |
+| `???` | Recognised anywhere inside a field, so it can sit among other text. The supplied demo templates use this |
 
 Write them in a text editor, in Zebra's designer, or in Rock's — whatever
 produces ZPL. Upload the file on the **Blank Labels** tab. It is rejected if it
-is not ZPL, if it is over a megabyte, or if there is no `???` inside a `^FD`
-field, since a blank with nowhere to put a code is not a blank. A `???` in a
-`^FX` comment does not count, because a comment is never printed.
+is not ZPL, if it is over a megabyte, or if there is no placeholder inside a
+`^FD` field, since a blank with nowhere to put a code is not a blank. A
+placeholder in a `^FX` comment does not count, because a comment is never
+printed.
 
 **The size is fixed in the template.** `^PW` and `^LL` set the printable width
 and label length in dots, so a template written for 3x2 stock prints 3x2

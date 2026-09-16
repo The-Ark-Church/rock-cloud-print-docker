@@ -341,6 +341,57 @@ public class ZplResolveTests
         Assert.Equal( notALabel, ZplTemplate.AmendForCutter( notALabel, cut: true ) );
     }
 
+    [Fact]
+    public void Resolve_AcceptsTheLegacyTokenWhenItIsTheWholeField()
+    {
+        // What somebody designing a label in Rock reaches for, because it is
+        // what Rock's own legacy check-in labels use.
+        Assert.Equal( Latin1( "^XA^FT1,1^FDK7M^FS^XZ" ),
+                      ZplTemplate.Resolve( Latin1( "^XA^FT1,1^FDWWW^FS^XZ" ), "K7M" ) );
+
+        Assert.True( ZplTemplate.ContainsCodeToken( Latin1( "^XA^FDWWW^FS^XZ" ) ) );
+    }
+
+    [Fact]
+    public void Resolve_DoesNotTouchTheLegacyTokenInsideOtherText()
+    {
+        // The reason it has to be the whole field. Three letters turn up by
+        // accident in a way three question marks do not, and a web address
+        // with a code substituted into the middle of it would be worse than
+        // not recognising the token at all.
+        var template = Latin1( "^XA^FDwww.example.com^FS^FDWWW Ministries^FS^FD???^FS^XZ" );
+        var resolved = Encoding.Latin1.GetString( ZplTemplate.Resolve( template, "K7M" ) );
+
+        Assert.Contains( "^FDwww.example.com^FS", resolved, StringComparison.Ordinal );
+        Assert.Contains( "^FDWWW Ministries^FS", resolved, StringComparison.Ordinal );
+        Assert.Contains( "^FDK7M^FS", resolved, StringComparison.Ordinal );
+    }
+
+    [Fact]
+    public void ContainsCodeToken_IgnoresTheLegacyTokenInsideOtherText()
+    {
+        // And a label whose only WWW is part of a web address has nowhere to
+        // put a code, so storing it would produce an unusable blank.
+        Assert.False( ZplTemplate.ContainsCodeToken( Latin1( "^XA^FDwww.example.com^FS^XZ" ) ) );
+    }
+
+    [Fact]
+    public void Resolve_AcceptsTheLegacyTokenAroundALineBreak()
+    {
+        // A rendered label carries \& either side of a field's value.
+        Assert.Equal( Latin1( "^XA^FDK7M^FS^XZ" ),
+                      ZplTemplate.Resolve( Latin1( "^XA^FDWWW\\&^FS^XZ" ), "K7M" ) );
+    }
+
+    [Fact]
+    public void Resolve_StillPrefersTheProxysOwnTokenWhereBothCouldApply()
+    {
+        // ??? keeps working exactly as it did, so every stored label and the
+        // supplied templates are unaffected.
+        Assert.Equal( Latin1( "^XA^FDCode: K7M^FS^XZ" ),
+                      ZplTemplate.Resolve( Latin1( "^XA^FDCode: ???^FS^XZ" ), "K7M" ) );
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static byte[] DemoTemplate( string resource )
