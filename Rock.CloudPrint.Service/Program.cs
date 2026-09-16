@@ -603,10 +603,11 @@ public class Program
         //
         // The code is a real one from the chosen mode: an actual random code,
         // or the actual next sequential code. It used to be a row of X, on the
-        // reasoning that X is the widest character and so the safest test of
-        // whether a code fits. That reasoning was sound and the result was
-        // still wrong - asking for random codes and being shown XXX tells you
-        // nothing about what will be on the labels.
+        // reasoning that the widest character is the safest test of whether a
+        // code fits. Twice wrong: W is the widest character, not X, and being
+        // shown a placeholder after asking for random codes says nothing about
+        // what will be on the labels. Widest-case now belongs to the test copy,
+        // which prints WWW.
         //
         // The PNGs come back as base64 for data: URLs. An img tag cannot carry
         // the bearer token this API requires, and the content security policy

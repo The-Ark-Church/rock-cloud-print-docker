@@ -64,13 +64,6 @@ internal sealed class LabelPreview
     public const int Dpi = 203;
 
     /// <summary>
-    /// Used to make up a sample code. A row of X is unmistakably not a real
-    /// code, and X is one of the widest characters in the alphabet, so a code
-    /// that fits as X will fit as anything.
-    /// </summary>
-    public const char SampleCharacter = 'X';
-
-    /// <summary>
     /// What to render when the template does not declare a size. Labelary's
     /// own default, and the commonest label stock.
     /// </summary>
@@ -84,14 +77,6 @@ internal sealed class LabelPreview
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
-    }
-
-    /// <summary>
-    /// A sample code of the given length.
-    /// </summary>
-    public static string SampleCode( int length )
-    {
-        return new string( SampleCharacter, Math.Clamp( length, 1, SecurityCode.MaxLength ) );
     }
 
     /// <summary>

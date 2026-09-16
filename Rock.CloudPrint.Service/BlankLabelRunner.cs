@@ -117,10 +117,22 @@ internal sealed record BlankRunStatus
 internal sealed class BlankLabelRunner
 {
     /// <summary>
-    /// The code printed on a test copy. Recognisable on sight as not a real
-    /// one, so a test copy cannot be mistaken for part of a stack.
+    /// What a test copy's code is made of, repeated to whatever length the run
+    /// would use.
+    ///
+    /// <para>
+    /// W is the widest character in the code alphabet, and it is what Rock's
+    /// own legacy check-in labels use as their security code placeholder. A
+    /// label designed for check-in has already been laid out around it.
+    /// </para>
+    ///
+    /// <para>
+    /// It is a fixed marker, but that is not what keeps a test copy out of a
+    /// real batch - a random run could produce the same code. What keeps it out
+    /// is that a test copy does not move the sequential counter.
+    /// </para>
     /// </summary>
-    public const string TestCode = "XXX";
+    public const char TestCharacter = 'W';
 
     /// <summary>
     /// An upper bound on how many labels can make up one copy. Not a rule
@@ -234,7 +246,17 @@ internal sealed class BlankLabelRunner
 
         if ( request.IsTestCopy )
         {
-            codes = new[] { request.Prefix + TestCode };
+            // At the length the real run would use, so the test proves the
+            // width for the codes that are actually going to be printed.
+            var testLength = sequential
+                ? ( ( !string.IsNullOrWhiteSpace( request.Start ) ? request.Start.Trim() : _state.Current.SequentialNext )
+                    ?? new string( '0', SecurityCode.DefaultLength ) ).Length
+                : request.CodeLength;
+
+            codes = new[]
+            {
+                request.Prefix + new string( TestCharacter, Math.Clamp( testLength, 1, SecurityCode.MaxLength ) )
+            };
         }
         else if ( sequential )
         {
