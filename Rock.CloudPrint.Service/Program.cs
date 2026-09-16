@@ -66,6 +66,7 @@ public class Program
         builder.Services.AddSingleton<PrinterTester>();
         builder.Services.AddSingleton<LabelStore>();
         builder.Services.AddSingleton<BlankLabelStateStore>();
+        builder.Services.AddSingleton<BlankLabelRunner>();
         builder.Services.AddSingleton<AuthService>();
 
         // Redirects are NOT followed: a URL matching no webhook in Rock redirects
@@ -571,6 +572,110 @@ public class Program
                 : Results.Json( new { error = $"There is no label called '{name}'." }, statusCode: 404 );
         } );
 
+        // Starts a run and answers immediately with its id. The run is not tied
+        // to this request: a stack of a thousand takes a while, and a closed
+        // tab must not cancel it half way through and lose the record of which
+        // codes went out. Progress is polled, and the only thing that ends a
+        // run early is a person pressing Cancel.
+        //
+        // Shares the printer test's rate limit, for the same reason it exists:
+        // this opens a connection to whatever address it is given.
+        app.MapPost( "/api/labels/print", ( BlankPrintRequest request, BlankLabelRunner runner, BlankLabelStateStore state ) =>
+        {
+            var address = ( request.Address ?? string.Empty ).Trim();
+
+            if ( address.Length > MaxPrinterAddressLength )
+                return Results.Json( new { error = "That address is too long to be a printer address." }, statusCode: 400 );
+
+            var (outcome, run, detail) = runner.Start( new BlankRunRequest
+            {
+                Address = address,
+                Labels = request.Labels ?? Array.Empty<string>(),
+                Quantity = request.Quantity ?? 0,
+                Mode = request.Mode ?? "random",
+                CodeLength = request.CodeLength ?? SecurityCode.DefaultLength,
+                Start = request.Start,
+                Prefix = ( request.Prefix ?? string.Empty ).Trim(),
+                IsTestCopy = request.Test ?? false
+            } );
+
+            return outcome switch
+            {
+                BlankRunStartOutcome.Started => Results.Json( run, statusCode: 202 ),
+
+                // No queue. One run at a time is the whole of the serialisation
+                // story, and telling somebody to wait is clearer than silently
+                // holding their request until a stack of a thousand finishes.
+                BlankRunStartOutcome.AlreadyRunning => Results.Json(
+                    new { error = "A run is already in progress.", run }, statusCode: 409 ),
+
+                BlankRunStartOutcome.NoLabels => Results.Json(
+                    new { error = detail ?? "Choose at least one label to print." }, statusCode: 400 ),
+                BlankRunStartOutcome.UnknownLabel => Results.Json(
+                    new { error = $"There is no label called '{detail}'." }, statusCode: 400 ),
+                BlankRunStartOutcome.BadAddress => Results.Json(
+                    new { error = detail ?? "That is not a printer address." }, statusCode: 400 ),
+                BlankRunStartOutcome.BadQuantity => Results.Json(
+                    new { error = "Enter how many copies to print." }, statusCode: 400 ),
+                BlankRunStartOutcome.BadCodeLength => Results.Json(
+                    new { error = $"A security code is between 1 and {SecurityCode.MaxLength} characters." }, statusCode: 400 ),
+                BlankRunStartOutcome.NotEnoughCodes => Results.Json(
+                    new { error = $"There are not enough different codes for that many copies. {detail}" }, statusCode: 400 ),
+                BlankRunStartOutcome.BadPrefix => Results.Json(
+                    new { error = "A prefix can be letters, digits, dashes and underscores." }, statusCode: 400 ),
+
+                BlankRunStartOutcome.NoSequentialStart => Results.Json( new
+                {
+                    error = state.SequentialStateUnreadable
+                        ? "The record of which codes have been used could not be read, so this run needs a starting number. Check the last stack that was printed."
+                        : "Enter the number to start counting from.",
+                    sequentialStateUnreadable = state.SequentialStateUnreadable
+                }, statusCode: 400 ),
+
+                // The codes could not be written down, so they are not sent.
+                // Printing a stack nobody has a record of is worse than not
+                // printing one.
+                BlankRunStartOutcome.CouldNotReserve => Results.Json(
+                    new { error = $"The security codes could not be recorded, so nothing was printed. {detail}" }, statusCode: 500 ),
+
+                _ => Results.Json( new { error = "That run could not be started." }, statusCode: 400 )
+            };
+        } ).RequireRateLimiting( "printertest" );
+
+        // What the UI needs on load and while polling: the run, where the
+        // numbering has reached, and what went out before.
+        app.MapGet( "/api/labels/print", ( BlankLabelRunner runner, BlankLabelStateStore state ) =>
+        {
+            var current = state.Current;
+
+            return Results.Ok( new
+            {
+                run = runner.Current,
+                sequentialNext = current.SequentialNext,
+                sequentialReservedThrough = current.SequentialReservedThrough,
+                sequentialStateUnreadable = state.SequentialStateUnreadable,
+                history = current.History
+            } );
+        } );
+
+        app.MapGet( "/api/labels/print/{runId}", ( string runId, BlankLabelRunner runner ) =>
+        {
+            var run = runner.Current;
+
+            return run != null && run.Id == runId
+                ? Results.Ok( run )
+                : Results.Json( new { error = "There is no run with that id." }, statusCode: 404 );
+        } );
+
+        // Cancelling is a person's decision, and it is also how a run that is
+        // waiting on a printer nobody is going to fix gets out of the way.
+        app.MapPost( "/api/labels/print/{runId}/cancel", ( string runId, BlankLabelRunner runner ) =>
+        {
+            return runner.Cancel( runId )
+                ? Results.Ok( new { cancelling = runId } )
+                : Results.Json( new { error = "There is no run with that id still going." }, statusCode: 404 );
+        } );
+
         app.MapPost( "/api/restart", ( IHostApplicationLifetime lifetime ) =>
         {
             // Delay slightly so the HTTP response is fully sent before shutdown begins.
@@ -622,6 +727,24 @@ internal record PrinterTestRequest( string? Address, string? Mode );
 /// graphics and text that is not valid UTF-8.
 /// </summary>
 internal record LabelUploadRequest( string? Name, string? ContentBase64 );
+
+/// <summary>
+/// A request to print a stack of blank labels. Every field is optional on the
+/// wire and checked here, so a hand-written or half-filled request fails with
+/// a sentence rather than an exception.
+///
+/// <c>Quantity</c> is always a number of copies, never of labels: 500 with
+/// three labels ticked prints 1,500 labels.
+/// </summary>
+internal record BlankPrintRequest(
+    string? Address,
+    string[]? Labels,
+    int? Quantity,
+    string? Mode,
+    int? CodeLength,
+    string? Start,
+    string? Prefix,
+    bool? Test );
 
 /// <summary>
 /// Notification settings from the web UI. <c>Secret</c> is null when the caller

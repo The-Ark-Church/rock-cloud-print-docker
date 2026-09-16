@@ -7,6 +7,10 @@
 # It is volume-mounted into the container and should never be committed.
 config/appsettings.json
 
+# Python bytecode from the tools in tools/
+__pycache__/
+*.pyc
+
 # OS / editor junk
 .DS_Store
 Thumbs.db
