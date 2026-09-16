@@ -92,6 +92,10 @@
                 class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
                 Printers
             </button>
+            <button id="tab-labels" onclick="showTab('labels')"
+                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
+                Blank Labels
+            </button>
             <button id="tab-settings" onclick="showTab('settings')"
                 class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
                 Settings
@@ -220,6 +224,167 @@
             </div>
 
             <div id="printer-test-result" class="hidden mt-4 rounded-md p-3 text-sm"></div>
+        </div>
+
+    </div>
+
+    <!-- ── Blank labels ──────────────────────────────────────────────── -->
+    <div id="pane-labels" class="hidden max-w-4xl mx-auto px-6 mt-6 pb-12 space-y-4">
+
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <h2 class="text-sm font-semibold text-gray-900">Blank labels</h2>
+            <p class="mt-1 text-sm text-gray-600">
+                Prints a stack of pre-coded blank check-in labels for people to fill in by hand.
+                Every copy carries one security code shared by all of its labels, so a child's tag
+                and a parent's receipt still match at pickup.
+            </p>
+            <p class="mt-2 text-sm text-gray-600">
+                This needs nothing from Rock, which is the whole point — the stack exists for the
+                times Rock cannot be reached. Print it in advance, and choose a printer that is not
+                serving check-in.
+            </p>
+        </div>
+
+        <!-- Stored labels ─────────────────────────────────────────────── -->
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm font-semibold text-gray-900">Stored labels</h2>
+                <label class="text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer">
+                    Upload a label
+                    <input id="label-upload" type="file" accept=".zpl,.prn,.txt"
+                           class="hidden" onchange="uploadLabel(event)">
+                </label>
+            </div>
+            <p class="mt-1 text-xs text-gray-500">
+                ZPL files with <code class="bg-gray-100 px-1 rounded">???</code> where the security
+                code goes. Tick the labels that make up one copy, and use the arrows to set the
+                order they print in — the order matters if any of them cuts.
+            </p>
+
+            <div id="label-list" class="mt-3 border-t border-gray-100"></div>
+            <div id="label-message" class="hidden mt-3 rounded-md p-3 text-sm"></div>
+        </div>
+
+        <!-- Print ─────────────────────────────────────────────────────── -->
+        <div class="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-900">Print a stack</h2>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Printer</label>
+                <input id="blank-address" type="text" placeholder="192.168.1.50 or 192.168.1.50:9100"
+                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                <p class="mt-1 text-xs text-gray-500">
+                    An IP address, with an optional port. Pick one that is not serving check-in —
+                    nothing here stops two things printing to the same printer at once.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Copies</label>
+                    <input id="blank-quantity" type="number" min="1" value="50"
+                        oninput="updateBlankTotals()"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm tabular-nums
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p id="blank-totals" class="mt-1 text-xs text-gray-500">&nbsp;</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Codes</label>
+                    <select id="blank-mode" onchange="updateBlankMode()"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="random">Random</option>
+                        <option value="sequential">Sequential</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">
+                        Random codes avoid 0, O, 1 and I, which get misread aloud.
+                    </p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div id="blank-length-field">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Code length</label>
+                    <input id="blank-length" type="number" min="1" max="8" value="3"
+                        oninput="updateBlankTotals()"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm tabular-nums
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p class="mt-1 text-xs text-gray-500">
+                        Printed large so it reads at a glance, so more than five or six rarely fits.
+                        Preview it first.
+                    </p>
+                </div>
+
+                <div id="blank-start-field" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Start counting from</label>
+                    <input id="blank-start" type="text" inputmode="numeric" placeholder="0001"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm tabular-nums
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p id="blank-sequential-note" class="mt-1 text-xs text-gray-500">&nbsp;</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Prefix <span class="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input id="blank-prefix" type="text" maxlength="8" placeholder=""
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p class="mt-1 text-xs text-gray-500">Goes in front of every code.</p>
+                </div>
+            </div>
+
+            <div id="blank-preview" class="hidden rounded-md border border-gray-200 bg-gray-50 p-3">
+                <img id="blank-preview-image" alt="Preview of the label" class="max-w-full border border-gray-300 bg-white" />
+                <p id="blank-preview-caption" class="mt-2 text-xs text-gray-500"></p>
+            </div>
+
+            <div id="blank-message" class="hidden rounded-md p-3 text-sm"></div>
+
+            <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+                <button id="blank-print-btn" onclick="startBlankRun(false)"
+                    class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md
+                           hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    Print the stack
+                </button>
+                <button onclick="startBlankRun(true)"
+                    class="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium
+                           rounded-md hover:bg-gray-50 transition-colors">
+                    Print one test copy
+                </button>
+                <button onclick="previewLabel()"
+                    class="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium
+                           rounded-md hover:bg-gray-50 transition-colors">
+                    Preview
+                </button>
+            </div>
+        </div>
+
+        <!-- The run in progress ───────────────────────────────────────── -->
+        <div id="blank-run" class="hidden bg-white rounded-lg border border-gray-200 p-5">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h2 id="blank-run-title" class="text-sm font-semibold text-gray-900">Printing</h2>
+                    <p id="blank-run-detail" class="mt-1 text-sm text-gray-600 tabular-nums"></p>
+                    <p id="blank-run-codes" class="mt-1 text-xs text-gray-500 tabular-nums"></p>
+                </div>
+                <button id="blank-cancel-btn" onclick="cancelBlankRun()"
+                    class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium
+                           rounded-md hover:bg-gray-50 transition-colors whitespace-nowrap">
+                    Cancel
+                </button>
+            </div>
+            <div class="mt-3 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                <div id="blank-run-bar" class="h-full bg-blue-600 transition-all" style="width:0%"></div>
+            </div>
+        </div>
+
+        <!-- Previous runs ─────────────────────────────────────────────── -->
+        <div id="blank-history-card" class="hidden bg-white rounded-lg border border-gray-200 p-5">
+            <h2 class="text-sm font-semibold text-gray-900">Recent runs</h2>
+            <div id="blank-history" class="mt-2 text-sm"></div>
         </div>
 
     </div>
@@ -529,7 +694,7 @@
 
         // ── Tab management ────────────────────────────────────────────────
         function showTab( tab ) {
-            ['dashboard', 'logs', 'printers', 'settings'].forEach( t => {
+            ['dashboard', 'logs', 'printers', 'labels', 'settings'].forEach( t => {
                 const btn   = document.getElementById( 'tab-' + t );
                 const pane  = document.getElementById( 'pane-' + t );
                 const active = t === tab;
@@ -542,6 +707,7 @@
             if ( tab === 'settings' ) { loadSettings(); loadNotificationSettings(); loadSecuritySection(); }
             if ( tab === 'logs'     ) { refreshLogs(); }
             if ( tab === 'printers' ) { prefillPrinterAddress(); }
+            if ( tab === 'labels'   ) { loadLabels(); refreshRun(); }
         }
 
         // ── Status polling ────────────────────────────────────────────────
@@ -1066,6 +1232,452 @@
         }
 
         // ── Restart ───────────────────────────────────────────────────────
+        // ── Blank labels ──────────────────────────────────────────────────
+        //
+        // The whole tab works with Rock unreachable, so nothing here reads the
+        // connection status or waits for it.
+
+        const BLANK_PREFS = 'rock-cp-blank-labels';
+
+        let blankLabels     = [];            // what is stored, from the API
+        let blankOrder      = [];            // names, in the order they print
+        let blankPicked     = new Set();     // which of them make up a copy
+        let blankSequential = {};            // where the numbering has reached
+        let blankRun        = null;
+        let blankPollTimer  = null;
+        let blankRestored   = false;
+
+        // The same group gets printed every few months, so re-ticking it and
+        // re-typing the printer every time is pointless friction.
+        function loadBlankPrefs() {
+            try { return JSON.parse( localStorage.getItem( BLANK_PREFS ) ) || {}; }
+            catch ( e ) { return {}; }
+        }
+
+        function saveBlankPrefs() {
+            try {
+                localStorage.setItem( BLANK_PREFS, JSON.stringify( {
+                    order:   blankOrder,
+                    picked:  [...blankPicked],
+                    address: document.getElementById( 'blank-address' ).value.trim()
+                } ) );
+            } catch ( e ) { /* private browsing, or a full quota. Not worth a message. */ }
+        }
+
+        function showLabelMessage( kind, html ) {
+            showBoxMessage( 'label-message', kind, html, 'mt-3' );
+        }
+
+        function showBlankMessage( kind, html ) {
+            showBoxMessage( 'blank-message', kind, html, '' );
+        }
+
+        function showBoxMessage( id, kind, html, extra ) {
+            const el = document.getElementById( id );
+            const styles = {
+                ok:      'bg-green-50 border border-green-200 text-green-800',
+                bad:     'bg-red-50 border border-red-200 text-red-800',
+                waiting: 'bg-gray-50 border border-gray-200 text-gray-600',
+            };
+            el.className = ( extra + ' rounded-md p-3 text-sm ' + styles[kind] ).trim();
+            el.innerHTML = html;
+            el.classList.remove( 'hidden' );
+        }
+
+        function hideBlankMessage() {
+            document.getElementById( 'blank-message' ).classList.add( 'hidden' );
+        }
+
+        async function loadLabels() {
+            let resp;
+            try { resp = await authFetch( '/api/labels' ); }
+            catch ( e ) { return; }
+
+            if ( !resp.ok ) { showLabelMessage( 'bad', 'Could not read the stored labels.' ); return; }
+
+            blankLabels = await resp.json();
+
+            if ( !blankRestored ) {
+                const prefs = loadBlankPrefs();
+                blankOrder  = Array.isArray( prefs.order ) ? prefs.order.slice() : [];
+                blankPicked = new Set( Array.isArray( prefs.picked ) ? prefs.picked : [] );
+                const address = document.getElementById( 'blank-address' );
+                if ( prefs.address && !address.value ) address.value = prefs.address;
+                blankRestored = true;
+            }
+
+            // Keep the remembered order for labels that still exist, put anything
+            // new at the end, and forget anything that has been deleted.
+            const names = blankLabels.map( l => l.name );
+            blankOrder  = blankOrder.filter( n => names.includes( n ) );
+            names.forEach( n => { if ( !blankOrder.includes( n ) ) blankOrder.push( n ); } );
+            [...blankPicked].forEach( n => { if ( !names.includes( n ) ) blankPicked.delete( n ); } );
+
+            renderLabelList();
+            updateBlankTotals();
+        }
+
+        // Size is baked into the template and cannot be changed from here, so
+        // this is a note about which stock to load rather than a setting.
+        function describeSize( label ) {
+            if ( !label.widthDots || !label.lengthDots ) {
+                return { text: label.bytes + ' bytes',
+                         tip:  'This template does not say what size it is.' };
+            }
+            const w = ( label.widthDots  / 203 ).toFixed( 1 );
+            const h = ( label.lengthDots / 203 ).toFixed( 1 );
+            return {
+                text: w + ' × ' + h + ' in · ' + label.bytes + ' bytes',
+                tip:  'The size is fixed in the template (^PW' + label.widthDots +
+                      ' ^LL' + label.lengthDots + '), shown at 203 dpi. Load the stock that matches.'
+            };
+        }
+
+        function renderLabelList() {
+            const host = document.getElementById( 'label-list' );
+
+            if ( !blankOrder.length ) {
+                host.innerHTML = '<p class="py-4 text-sm text-gray-500">' +
+                    'Nothing stored. Upload a ZPL file with <code class="bg-gray-100 px-1 rounded">???</code> ' +
+                    'where the security code should go.</p>';
+                return;
+            }
+
+            const byName = {};
+            blankLabels.forEach( l => { byName[l.name] = l; } );
+
+            host.innerHTML = blankOrder.map( ( name, i ) => {
+                const label = byName[name] || { bytes: 0 };
+                const size  = describeSize( label );
+                const arrow = 'px-2 py-1 text-gray-400 hover:text-gray-700 disabled:opacity-30 ' +
+                              'disabled:hover:text-gray-400 text-sm leading-none';
+                return '<div class="flex items-center gap-3 py-2 border-b border-gray-100">' +
+                    '<input type="checkbox" ' + ( blankPicked.has( name ) ? 'checked ' : '' ) +
+                        'onchange="toggleLabel(' + i + ')" ' +
+                        'class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">' +
+                    '<div class="flex-1 min-w-0">' +
+                        '<p class="text-sm font-medium text-gray-900 truncate">' + escHtml( name ) + '</p>' +
+                        '<p class="text-xs text-gray-500" title="' + escHtml( size.tip ) + '">' +
+                            escHtml( size.text ) + '</p>' +
+                    '</div>' +
+                    '<button onclick="moveLabel(' + i + ',-1)" class="' + arrow + '" ' +
+                        ( i === 0 ? 'disabled ' : '' ) + 'title="Print earlier">&#9650;</button>' +
+                    '<button onclick="moveLabel(' + i + ',1)" class="' + arrow + '" ' +
+                        ( i === blankOrder.length - 1 ? 'disabled ' : '' ) + 'title="Print later">&#9660;</button>' +
+                    '<button onclick="deleteLabel(' + i + ')" ' +
+                        'class="px-2 py-1 text-xs text-gray-400 hover:text-red-600">Delete</button>' +
+                '</div>';
+            } ).join( '' );
+        }
+
+        function toggleLabel( index ) {
+            const name = blankOrder[index];
+            if ( blankPicked.has( name ) ) blankPicked.delete( name ); else blankPicked.add( name );
+            saveBlankPrefs();
+            updateBlankTotals();
+        }
+
+        function moveLabel( index, delta ) {
+            const target = index + delta;
+            if ( target < 0 || target >= blankOrder.length ) return;
+            const [moved] = blankOrder.splice( index, 1 );
+            blankOrder.splice( target, 0, moved );
+            saveBlankPrefs();
+            renderLabelList();
+        }
+
+        // Copies, never labels. Somebody asking for 500 wants 500 usable sets,
+        // and the label count is shown next to it only so they know how much
+        // stock to have to hand.
+        function updateBlankTotals() {
+            const copies = parseInt( document.getElementById( 'blank-quantity' ).value, 10 ) || 0;
+            const picked = blankPicked.size;
+            const el     = document.getElementById( 'blank-totals' );
+
+            if ( !copies || !picked ) { el.textContent = 'Copies of the ticked labels, not a label count.'; return; }
+
+            el.textContent = copies.toLocaleString() + ( copies === 1 ? ' copy · ' : ' copies · ' ) +
+                             ( copies * picked ).toLocaleString() + ' labels';
+        }
+
+        function updateBlankMode() {
+            const sequential = document.getElementById( 'blank-mode' ).value === 'sequential';
+            document.getElementById( 'blank-start-field'  ).classList.toggle( 'hidden', !sequential );
+            document.getElementById( 'blank-length-field' ).classList.toggle( 'hidden', sequential );
+        }
+
+        async function uploadLabel( event ) {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if ( !file ) return;
+
+            const name = file.name.replace( /\.(zpl|prn|txt)$/i, '' );
+            const buffer = new Uint8Array( await file.arrayBuffer() );
+
+            // Base64 by hand rather than FileReader, so the bytes go across
+            // untouched - a template can legitimately contain bytes that are
+            // not valid text.
+            let binary = '';
+            buffer.forEach( b => { binary += String.fromCharCode( b ); } );
+
+            try {
+                const resp = await authFetch( '/api/labels', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { name, contentBase64: btoa( binary ) } )
+                } );
+                const data = await resp.json();
+
+                if ( !resp.ok ) { showLabelMessage( 'bad', escHtml( data.error || 'That label was not stored.' ) ); return; }
+
+                showLabelMessage( 'ok', 'Stored <strong>' + escHtml( data.name ) + '</strong>.' );
+                await loadLabels();
+            } catch ( e ) { /* authFetch already handled a 401 */ }
+        }
+
+        async function deleteLabel( index ) {
+            const name = blankOrder[index];
+            if ( !confirm( 'Delete "' + name + '"?\n\nThe three demo labels can be downloaded again from the project page; anything else you uploaded cannot.' ) ) return;
+
+            try {
+                const resp = await authFetch( '/api/labels/' + encodeURIComponent( name ), { method: 'DELETE' } );
+                if ( !resp.ok ) {
+                    const data = await resp.json();
+                    showLabelMessage( 'bad', escHtml( data.error || 'That label was not deleted.' ) );
+                    return;
+                }
+                showLabelMessage( 'ok', 'Deleted <strong>' + escHtml( name ) + '</strong>.' );
+                await loadLabels();
+            } catch ( e ) { /* handled */ }
+        }
+
+        function firstPickedLabel() {
+            for ( const name of blankOrder ) if ( blankPicked.has( name ) ) return name;
+            return null;
+        }
+
+        async function previewLabel() {
+            const name = firstPickedLabel();
+            if ( !name ) { showBlankMessage( 'bad', 'Tick a label to preview.' ); return; }
+
+            hideBlankMessage();
+            showBlankMessage( 'waiting', 'Drawing ' + escHtml( name ) + '…' );
+
+            const body = {
+                name,
+                codeLength: parseInt( document.getElementById( 'blank-length' ).value, 10 ) || 3,
+                prefix:     document.getElementById( 'blank-prefix' ).value.trim()
+            };
+
+            try {
+                const resp = await authFetch( '/api/labels/preview', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( body )
+                } );
+                const data = await resp.json();
+
+                if ( resp.status === 429 ) { showBlankMessage( 'bad', 'Too many previews at once. Try again in a second.' ); return; }
+                if ( !resp.ok ) { showBlankMessage( 'bad', escHtml( data.error || 'That label could not be drawn.' ) ); return; }
+
+                // A data: URL, because the content security policy allows only
+                // this origin and data: for images, and an <img src> could not
+                // carry the bearer token this API needs anyway.
+                document.getElementById( 'blank-preview-image' ).src = 'data:image/png;base64,' + data.png;
+                document.getElementById( 'blank-preview-caption' ).textContent =
+                    name + ' with the code ' + data.code + ', at ' +
+                    ( data.widthDots / data.dpi ).toFixed( 1 ) + ' × ' +
+                    ( data.lengthDots / data.dpi ).toFixed( 1 ) + ' in, drawn at ' + data.dpi + ' dpi.';
+                document.getElementById( 'blank-preview' ).classList.remove( 'hidden' );
+                hideBlankMessage();
+            } catch ( e ) { /* handled */ }
+        }
+
+        async function startBlankRun( isTest ) {
+            const address = document.getElementById( 'blank-address' ).value.trim();
+            const labels  = blankOrder.filter( n => blankPicked.has( n ) );
+            const mode    = document.getElementById( 'blank-mode' ).value;
+            const start   = document.getElementById( 'blank-start' ).value.trim();
+
+            if ( !address ) { showBlankMessage( 'bad', 'Enter the printer address.' ); return; }
+            if ( !labels.length ) { showBlankMessage( 'bad', 'Tick at least one label.' ); return; }
+
+            // Advisory only - there is no limit on the server, and a thousand
+            // sets has been printed in practice. This is here to catch the
+            // stray extra zero, so it sits above anything anyone has asked for.
+            const copies = parseInt( document.getElementById( 'blank-quantity' ).value, 10 ) || 0;
+            if ( !isTest && copies > 1000 ) {
+                if ( !confirm( copies.toLocaleString() + ' copies is ' +
+                               ( copies * labels.length ).toLocaleString() +
+                               ' labels. Make sure there is enough stock on the roll — the printer will pause ' +
+                               'and carry on when it is reloaded, but it is a long wait.\n\nPrint them?' ) ) return;
+            }
+
+            // Starting below what has already gone out would put the same code
+            // on two different stacks. Worth stopping to think about, but it is
+            // still their call - there are good reasons to reprint.
+            if ( mode === 'sequential' && !isTest ) {
+                const from = start || blankSequential.sequentialNext || '';
+                const used = blankSequential.sequentialReservedThrough;
+                if ( from && used && Number( from ) <= Number( used ) ) {
+                    const last = ( blankSequential.history || [] )[0];
+                    const when = last ? '\n\nThe run on ' + fmtDate( last.startedAt ) + ' used ' +
+                                        last.firstCode + ' to ' + last.lastCode + '.' : '';
+                    if ( !confirm( 'Codes up to ' + used + ' have already been printed.' + when +
+                                   '\n\nStarting at ' + from + ' puts the same codes on a second stack. Print anyway?' ) ) return;
+                }
+            }
+
+            saveBlankPrefs();
+            hideBlankMessage();
+
+            const body = {
+                address, labels, mode,
+                quantity:   parseInt( document.getElementById( 'blank-quantity' ).value, 10 ) || 0,
+                codeLength: parseInt( document.getElementById( 'blank-length' ).value, 10 ) || 3,
+                prefix:     document.getElementById( 'blank-prefix' ).value.trim(),
+                test:       !!isTest
+            };
+            if ( start ) body.start = start;
+
+            try {
+                const resp = await authFetch( '/api/labels/print', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( body )
+                } );
+                const data = await resp.json();
+
+                if ( resp.status === 429 ) { showBlankMessage( 'bad', 'Too many runs started at once. Wait a moment.' ); return; }
+                if ( resp.status === 409 ) { showBlankMessage( 'bad', 'A run is already going. Wait for it to finish, or cancel it.' ); refreshRun(); return; }
+                if ( !resp.ok ) { showBlankMessage( 'bad', escHtml( data.error || 'That run could not be started.' ) ); return; }
+
+                blankRun = data;
+                renderRun();
+                startRunPolling();
+            } catch ( e ) { /* handled */ }
+        }
+
+        async function cancelBlankRun() {
+            if ( !blankRun ) return;
+            try { await authFetch( '/api/labels/print/' + encodeURIComponent( blankRun.id ) + '/cancel', { method: 'POST' } ); }
+            catch ( e ) { return; }
+            refreshRun();
+        }
+
+        function startRunPolling() {
+            if ( blankPollTimer ) return;
+            blankPollTimer = setInterval( refreshRun, 1000 );
+        }
+
+        function stopRunPolling() {
+            if ( !blankPollTimer ) return;
+            clearInterval( blankPollTimer );
+            blankPollTimer = null;
+        }
+
+        async function refreshRun() {
+            let resp;
+            try { resp = await authFetch( '/api/labels/print' ); }
+            catch ( e ) { stopRunPolling(); return; }
+            if ( !resp.ok ) return;
+
+            const data = await resp.json();
+            blankSequential = data;
+            blankRun        = data.run;
+
+            renderRun();
+            renderSequentialNote();
+            renderHistory();
+
+            if ( blankRun && blankRun.status === 'running' ) startRunPolling(); else stopRunPolling();
+        }
+
+        function renderSequentialNote() {
+            const note = document.getElementById( 'blank-sequential-note' );
+            const box  = document.getElementById( 'blank-start' );
+
+            if ( blankSequential.sequentialStateUnreadable ) {
+                note.textContent = 'The record of used codes could not be read, so this needs a starting number. Check the last stack you printed.';
+                note.className   = 'mt-1 text-xs text-red-600';
+                box.placeholder  = 'required';
+                return;
+            }
+
+            note.className = 'mt-1 text-xs text-gray-500';
+
+            if ( blankSequential.sequentialNext ) {
+                box.placeholder  = blankSequential.sequentialNext;
+                note.textContent = 'Leave blank to carry on from ' + blankSequential.sequentialNext +
+                                   '. Codes up to ' + blankSequential.sequentialReservedThrough + ' have already gone out.';
+            } else {
+                note.textContent = 'No sequential run yet, so pick where to start.';
+            }
+        }
+
+        function renderRun() {
+            const card = document.getElementById( 'blank-run' );
+
+            if ( !blankRun ) { card.classList.add( 'hidden' ); return; }
+
+            const running = blankRun.status === 'running';
+            const done    = blankRun.copiesHandedToPrinter;
+            const total   = blankRun.quantity;
+
+            document.getElementById( 'blank-run-title' ).textContent = {
+                running:   'Printing',
+                completed: 'Finished',
+                cancelled: 'Cancelled',
+                failed:    'Stopped'
+            }[blankRun.status] || blankRun.status;
+
+            // "Handed to the printer", never "printed". A completed write only
+            // means the operating system took the bytes - the printer may still
+            // be working through them, or may have jammed.
+            let detail = done.toLocaleString() + ' of ' + total.toLocaleString() +
+                         ( total === 1 ? ' copy' : ' copies' ) + ' handed to the printer';
+            if ( blankRun.labelsPerCopy > 1 ) detail += ' · ' + ( done * blankRun.labelsPerCopy ).toLocaleString() + ' labels';
+            if ( blankRun.error ) detail += ' · ' + blankRun.error;
+
+            document.getElementById( 'blank-run-detail' ).textContent = detail;
+
+            let codes = 'Codes ' + blankRun.firstCode + ' to ' + blankRun.lastCode;
+            if ( blankRun.mode === 'sequential' ) {
+                codes += ' were reserved and will not be reused';
+                if ( blankSequential.sequentialNext ) codes += ' · the next run starts at ' + blankSequential.sequentialNext;
+            }
+            document.getElementById( 'blank-run-codes' ).textContent = codes;
+
+            document.getElementById( 'blank-run-bar' ).style.width =
+                ( total ? Math.round( 100 * done / total ) : 0 ) + '%';
+            document.getElementById( 'blank-cancel-btn' ).classList.toggle( 'hidden', !running );
+
+            card.classList.remove( 'hidden' );
+        }
+
+        function renderHistory() {
+            const card = document.getElementById( 'blank-history-card' );
+            const host = document.getElementById( 'blank-history' );
+            const runs = blankSequential.history || [];
+
+            if ( !runs.length ) { card.classList.add( 'hidden' ); return; }
+
+            host.innerHTML = runs.map( r => {
+                const colour = r.status === 'completed' ? 'text-green-700'
+                             : r.status === 'failed'    ? 'text-red-700' : 'text-gray-500';
+                return '<div class="flex items-baseline justify-between gap-3 py-1.5 border-b border-gray-100 last:border-0">' +
+                    '<span class="text-xs text-gray-500 tabular-nums whitespace-nowrap">' + escHtml( fmtDate( r.startedAt ) ) + '</span>' +
+                    '<span class="flex-1 text-sm text-gray-700 truncate">' +
+                        escHtml( r.firstCode + '–' + r.lastCode ) + ' · ' +
+                        escHtml( r.labels.join( ', ' ) ) + '</span>' +
+                    '<span class="text-xs tabular-nums whitespace-nowrap ' + colour + '">' +
+                        r.copiesHandedToPrinter + '/' + r.quantity + ' ' + escHtml( r.status ) + '</span>' +
+                '</div>';
+            } ).join( '' );
+
+            card.classList.remove( 'hidden' );
+        }
+
         async function restartService() {
             const note = authRequired
                 ? '\n\nYou will need to log in again after the restart.'
