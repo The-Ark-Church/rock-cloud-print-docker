@@ -214,8 +214,56 @@ Settings are stored in the `config/` directory outside the container and are una
 |---|---|
 | Dashboard | Connection status, uptime, labels printed counter |
 | Logs | Live service log (last 300 entries), color-coded by level |
+| Printers | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
 | Settings → Connection | Rock server URL, Proxy ID, Proxy Name |
+| Settings → Notifications | Tell Rock when a printer fails. Needs Rock-side setup first — see below |
 | Settings → Security | Set, change, or remove web UI PIN |
+
+---
+
+## Print failure notifications
+
+The proxy can tell your Rock server when a printer fails, or when a print
+finishes too slowly to be any use, so somebody can be told. **Off by default.**
+
+> ### This needs setting up in Rock first
+>
+> The container only posts to a web address. On its own that does nothing.
+> Someone has to create three things in Rock, and the container cannot create
+> any of them:
+>
+> 1. **A Lava webhook** to receive the message.
+> 2. **A workflow** for that webhook to launch.
+> 3. **The communications inside that workflow** — who gets told, and how.
+>
+> Until those exist, turning notifications on only records problems in the log.
+>
+> **An importable workflow and full setup steps are in the repository**, under
+> [`docs/rock/`](https://github.com/The-Ark-Church/rock-cloud-print-docker/tree/main/docs/rock).
+> It imports inert and notifies nobody until you set the groups.
+
+Once Rock is ready, configure it in **Settings → Notifications**: the webhook
+URL, the shared secret, and a quiet period. Then press **Send test
+notification** — it sends a real request and reports exactly what came back, so
+the URL, the secret, the webhook and the workflow are all proved at setup time
+rather than during an outage.
+
+**If Rock is configured correctly, pressing it may message people.** That is how
+you know it worked.
+
+A few things worth knowing:
+
+- The webhook URL must be `https` — the shared secret travels in a request
+  header. A plain `http` URL is refused rather than sent.
+- Use the same host as your Rock server URL. Behind a CDN the webhook sees the
+  CDN's address rather than your proxy's, and rejects it.
+- Notifications are debounced per printer, per kind of problem, defaulting to a
+  five minute quiet period. One printer failing ten times produces one
+  notification; ten printers failing produce ten, because that is ten things to
+  check.
+- If a notification cannot be delivered, the dashboard shows a banner naming the
+  actual fault — a rejected secret, a URL matching no webhook — rather than
+  saying the request failed. It clears on the next success.
 
 ---
 
