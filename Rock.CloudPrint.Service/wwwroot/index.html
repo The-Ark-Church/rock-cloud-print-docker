@@ -363,18 +363,26 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div class="col-span-2">
                     <label class="block text-xs font-medium text-gray-600 mb-1">Printer</label>
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <!-- Hidden until a printer has been named, so anyone who
-                             never saves one sees the box they saw before. -->
-                        <select id="blank-printer" onchange="pickSavedPrinter()"
-                            class="hidden w-32 shrink-0 border border-gray-300 rounded-md px-2 py-1.5 text-sm
-                                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></select>
-                        <input id="blank-address" type="text" placeholder="192.168.1.50" oninput="addressTyped()"
-                            class="flex-1 basis-32 min-w-0 border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
-                                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                        <button id="blank-printer-save" type="button" onclick="toggleSavedPrinter()"
-                            class="shrink-0 px-1 text-lg leading-none text-gray-300 hover:text-blue-600"
-                            title="Save this address under a name">&#9734;</button>
+                    <div class="flex items-center gap-2">
+                        <!-- One box. It takes a saved printer's name or an
+                             address, and the list under it narrows as you type.
+                             Whoever saved the printer typed the address once;
+                             everybody after them types the name. -->
+                        <div class="relative flex-1 min-w-0">
+                            <input id="blank-address" type="text" autocomplete="off"
+                                placeholder="Printer name, or 192.168.1.50"
+                                oninput="printerTyped()" onfocus="openPrinterList()"
+                                onkeydown="printerListKey(event)" onblur="closePrinterList()"
+                                class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                            <div id="printer-list"
+                                class="hidden absolute z-30 mt-1 w-full max-h-56 overflow-auto bg-white
+                                       border border-gray-200 rounded-md shadow-lg py-1"></div>
+                        </div>
+                        <button id="blank-printer-add" type="button" onclick="openPrinterDialog()"
+                            title="Save this printer"
+                            class="shrink-0 border border-gray-300 rounded-md px-2.5 py-1.5 text-sm leading-none
+                                   text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">+</button>
                         <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer whitespace-nowrap"
                             title="Cuts after the last label of each copy, so one copy comes off together. The proxy sends the cut command itself, so the label does not have to carry one. Use this if your printer has a cutter.">
                             <input id="blank-cutter" type="checkbox" onchange="saveBlankPrefs()"
@@ -490,6 +498,55 @@
                     class="text-gray-400 hover:text-gray-700 text-lg leading-none px-1">&times;</button>
             </div>
             <div id="preview-body" class="p-4 space-y-4 overflow-auto"></div>
+        </div>
+    </div>
+
+    <!-- Naming a printer, so the next person can pick it out of a list without
+         being told an IP address. Fields rather than a browser prompt, because
+         there are three of them and one is a checkbox. -->
+    <div id="printer-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" onclick="closePrinterDialog()"></div>
+        <div class="relative bg-white rounded-lg shadow-xl w-full max-w-sm flex flex-col">
+            <div class="flex items-start justify-between gap-4 px-4 py-3 border-b border-gray-200">
+                <h3 id="printer-modal-title" class="text-sm font-semibold text-gray-900">Save this printer</h3>
+                <button onclick="closePrinterDialog()" title="Close"
+                    class="text-gray-400 hover:text-gray-700 text-lg leading-none px-1">&times;</button>
+            </div>
+
+            <div class="p-4 space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                    <input id="printer-modal-name" type="text" maxlength="40" placeholder="Kids Check-in"
+                        onkeydown="printerDialogKey(event)"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p class="mt-1 text-xs text-gray-500">What people will pick from the list.</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">IP address</label>
+                    <input id="printer-modal-address" type="text" placeholder="192.168.1.50"
+                        onkeydown="printerDialogKey(event)"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p class="mt-1 text-xs text-gray-500">With a port if it is not 9100.</p>
+                </div>
+
+                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input id="printer-modal-cutter" type="checkbox"
+                        class="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    Has cutter
+                </label>
+
+                <div id="printer-modal-message" class="hidden rounded-md p-2 text-xs"></div>
+            </div>
+
+            <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-200">
+                <button onclick="closePrinterDialog()"
+                    class="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onclick="savePrinterDialog()"
+                    class="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700">Save</button>
+            </div>
         </div>
     </div>
 
@@ -1371,13 +1428,17 @@
 
         // ── Saved printers ────────────────────────────────────────────────
         // The list lives on the proxy, not in this browser. An address kept in
-        // local storage is remembered for one person on one machine, which left
-        // the next administrator who had to print blanks looking up an IP.
+        // local storage is remembered for one person on one machine, which
+        // left the next administrator who had to print blanks looking up an IP.
         //
-        // Nothing here is required. The box still takes a typed address, and a
-        // run is still sent the address rather than the name.
+        // There is one box. It takes a saved printer's name or a raw address,
+        // and the name is resolved to an address at the moment of printing. So
+        // whoever sets a printer up types its address once, and everybody
+        // after them types the name and never sees one.
 
-        let savedPrinters = [];
+        let savedPrinters    = [];
+        let printerListIndex = -1;      // the row the arrow keys are on
+        let printerEditing   = null;    // the printer the dialog was opened on
 
         async function loadSavedPrinters() {
             let resp;
@@ -1388,134 +1449,277 @@
 
             savedPrinters = await resp.json();
 
-            renderSavedPrinters();
+            if ( isPrinterListOpen() ) renderPrinterList();
         }
 
-        function renderSavedPrinters() {
-            const select = document.getElementById( 'blank-printer' );
+        // A name that matches a saved printer wins, because that is what was
+        // typed. Anything else is an address and is used as one.
+        function resolvePrinter( text ) {
+            const value = ( text || '' ).trim().toLowerCase();
 
-            // Built as elements rather than markup: a printer name is typed by
-            // a person and escHtml does not escape quotes, so it has no business
-            // being concatenated into an attribute.
-            select.replaceChildren();
+            return savedPrinters.find( p => p.name.toLowerCase() === value ) || null;
+        }
 
-            savedPrinters.forEach( printer => {
-                const option = document.createElement( 'option' );
-                option.value = printer.name;
-                option.textContent = printer.name;
-                select.appendChild( option );
+        // What a run is actually sent. Named here rather than read straight out
+        // of the box, because the box may be holding a name.
+        function printerAddressForRun() {
+            const value   = document.getElementById( 'blank-address' ).value.trim();
+            const printer = resolvePrinter( value );
+
+            return printer ? printer.address : value;
+        }
+
+        function isPrinterListOpen() {
+            return !document.getElementById( 'printer-list' ).classList.contains( 'hidden' );
+        }
+
+        function openPrinterList() {
+            printerListIndex = -1;
+            renderPrinterList();
+        }
+
+        function closePrinterList() {
+            document.getElementById( 'printer-list' ).classList.add( 'hidden' );
+            printerListIndex = -1;
+        }
+
+        function matchingPrinters() {
+            const value = document.getElementById( 'blank-address' ).value.trim().toLowerCase();
+
+            // An empty box, or one already holding a printer's name, shows the
+            // whole list - so a different printer can be chosen without having
+            // to clear the box first.
+            if ( !value || resolvePrinter( value ) ) return savedPrinters;
+
+            return savedPrinters.filter( p =>
+                p.name.toLowerCase().includes( value ) || p.address.toLowerCase().includes( value ) );
+        }
+
+        function renderPrinterList() {
+            const list = document.getElementById( 'printer-list' );
+            const rows = matchingPrinters();
+
+            list.replaceChildren();
+
+            // Nothing to offer is not a dropdown. Somebody who has never saved
+            // a printer sees a plain box and nothing else.
+            if ( !rows.length ) { list.classList.add( 'hidden' ); return; }
+
+            rows.forEach( ( printer, i ) => {
+                const row = document.createElement( 'div' );
+
+                row.className = 'flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer ' +
+                    ( i === printerListIndex ? 'bg-blue-50' : 'hover:bg-gray-50' );
+
+                // mousedown rather than click: the box loses focus first, and
+                // the blur that closes the list would land before a click did.
+                row.addEventListener( 'mousedown', event => {
+                    event.preventDefault();
+                    choosePrinter( printer.name );
+                } );
+
+                const name = document.createElement( 'span' );
+                name.className = 'flex-1 min-w-0 truncate text-gray-900';
+                name.textContent = printer.name;
+
+                const where = document.createElement( 'span' );
+                where.className = 'text-xs text-gray-400 whitespace-nowrap';
+                where.textContent = printer.address + ( printer.hasCutter ? ' · cutter' : '' );
+
+                const forget = document.createElement( 'button' );
+                forget.className = 'shrink-0 px-1 text-sm leading-none text-gray-300 hover:text-red-600';
+                forget.title = 'Forget this printer';
+                forget.innerHTML = '&times;';
+                forget.addEventListener( 'mousedown', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    forgetPrinter( printer.name );
+                } );
+
+                row.append( name, where, forget );
+                list.appendChild( row );
             } );
 
-            const other = document.createElement( 'option' );
-            other.value = '';
-            other.textContent = 'Another address…';
-            select.appendChild( other );
-
-            // Nobody who has never saved a printer should have to look at an
-            // empty dropdown.
-            select.classList.toggle( 'hidden', savedPrinters.length === 0 );
-
-            syncPrinterChoice();
+            list.classList.remove( 'hidden' );
         }
 
-        // Which saved printer the box is showing, if any. The dropdown's own
-        // choice wins while it still agrees with the box, so two names pointing
-        // at one address stay distinguishable.
-        function matchedPrinter() {
-            const address = document.getElementById( 'blank-address' ).value.trim();
+        function choosePrinter( name ) {
+            const printer = savedPrinters.find( p => p.name === name );
 
-            if ( !address ) return null;
+            if ( !printer ) return;
 
-            const chosen = savedPrinters.find( p => p.name === document.getElementById( 'blank-printer' ).value );
+            document.getElementById( 'blank-address' ).value = printer.name;
 
-            if ( chosen && chosen.address === address ) return chosen;
+            // The cutter is a fact about the machine, so choosing one sets it.
+            // Still a checkbox, so it can be overridden for a single run.
+            document.getElementById( 'blank-cutter' ).checked = !!printer.hasCutter;
 
-            return savedPrinters.find( p => p.address === address ) || null;
-        }
-
-        function syncPrinterChoice() {
-            const match = matchedPrinter();
-            const star  = document.getElementById( 'blank-printer-save' );
-
-            document.getElementById( 'blank-printer' ).value = match ? match.name : '';
-
-            star.innerHTML = match ? '&#9733;' : '&#9734;';
-            star.title     = match ? 'Forget "' + match.name + '"' : 'Save this address under a name';
-            star.className = 'shrink-0 px-1 text-lg leading-none ' +
-                ( match ? 'text-blue-600 hover:text-red-600' : 'text-gray-300 hover:text-blue-600' );
-        }
-
-        function pickSavedPrinter() {
-            const address = document.getElementById( 'blank-address' );
-            const printer = savedPrinters.find( p => p.name === document.getElementById( 'blank-printer' ).value );
-
-            if ( printer ) {
-                address.value = printer.address;
-
-                // The cutter is a fact about the machine, so choosing one sets
-                // it. Still a checkbox, so it can be overridden for one run.
-                document.getElementById( 'blank-cutter' ).checked = !!printer.hasCutter;
-            } else {
-                address.value = '';
-                address.focus();
-            }
-
+            closePrinterList();
             saveBlankPrefs();
-            syncPrinterChoice();
         }
 
-        function addressTyped() {
+        function printerTyped() {
+            printerListIndex = -1;
+
+            renderPrinterList();
             saveBlankPrefs();
-            syncPrinterChoice();
         }
 
-        async function toggleSavedPrinter() {
-            const address  = document.getElementById( 'blank-address' ).value.trim();
-            const existing = matchedPrinter();
+        function printerListKey( event ) {
+            if ( event.key === 'Escape' ) { closePrinterList(); return; }
 
-            if ( !address ) { showBlankMessage( 'bad', 'Enter the printer address first.' ); return; }
+            const rows = matchingPrinters();
 
-            if ( existing ) {
-                if ( !confirm( 'Stop offering "' + existing.name + '" in the list?\n\n' +
-                               'The address stays in the box, and nothing already printed is affected.' ) ) return;
+            if ( event.key === 'ArrowDown' || event.key === 'ArrowUp' ) {
+                if ( !rows.length ) return;
 
-                await printerBookRequest( '/api/printers/' + encodeURIComponent( existing.name ),
-                    { method: 'DELETE' }, 'Removed <strong>' + escHtml( existing.name ) + '</strong>.' );
+                event.preventDefault();
+
+                if ( !isPrinterListOpen() ) { openPrinterList(); return; }
+
+                printerListIndex = ( printerListIndex + ( event.key === 'ArrowDown' ? 1 : rows.length ) ) % rows.length;
+
+                renderPrinterList();
 
                 return;
             }
 
-            const name = ( prompt( 'What should this printer be called?\n\n' + address, '' ) || '' ).trim();
+            if ( event.key === 'Enter' && isPrinterListOpen() && printerListIndex >= 0 ) {
+                event.preventDefault();
 
-            if ( !name ) return;
+                choosePrinter( rows[printerListIndex].name );
+            }
+        }
 
-            await printerBookRequest( '/api/printers', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify( {
-                    name:      name,
-                    address:   address,
-                    hasCutter: document.getElementById( 'blank-cutter' ).checked
-                } )
-            }, 'Saved <strong>' + escHtml( name ) + '</strong>.' );
+        async function forgetPrinter( name ) {
+            const printer = savedPrinters.find( p => p.name === name );
+
+            if ( !printer ) return;
+
+            if ( !confirm( 'Stop offering "' + name + '" in the list?\n\n' +
+                           'The printer itself is untouched, and nothing already printed is affected.' ) ) return;
+
+            const box     = document.getElementById( 'blank-address' );
+            const showing = box.value.trim().toLowerCase() === name.toLowerCase();
+
+            if ( !await printerBookRequest( '/api/printers/' + encodeURIComponent( name ), { method: 'DELETE' },
+                    'Removed <strong>' + escHtml( name ) + '</strong>.' ) ) return;
+
+            // The box was holding a name that now means nothing to anyone. Put
+            // the address in its place rather than emptying it.
+            if ( showing ) {
+                box.value = printer.address;
+                saveBlankPrefs();
+            }
+
+            renderPrinterList();
         }
 
         async function printerBookRequest( url, options, okMessage ) {
             let resp;
 
             try { resp = await authFetch( url, options ); }
-            catch ( e ) { showBlankMessage( 'bad', 'The list of printers could not be changed.' ); return; }
+            catch ( e ) { showBlankMessage( 'bad', 'The list of printers could not be changed.' ); return false; }
 
             const data = await resp.json().catch( () => ( {} ) );
 
             if ( !resp.ok ) {
                 showBlankMessage( 'bad', escHtml( data.error || 'The list of printers could not be changed.' ) );
-                return;
+
+                return false;
             }
 
             await loadSavedPrinters();
 
             showBlankMessage( 'ok', okMessage );
+
+            return true;
+        }
+
+        // The + button. Opens on whatever the box is holding: an address to be
+        // named, or a saved printer to be corrected.
+        function openPrinterDialog() {
+            const value = document.getElementById( 'blank-address' ).value.trim();
+
+            printerEditing = resolvePrinter( value );
+
+            document.getElementById( 'printer-modal-title' ).textContent =
+                printerEditing ? 'Edit this printer' : 'Save this printer';
+            document.getElementById( 'printer-modal-name' ).value = printerEditing ? printerEditing.name : '';
+            document.getElementById( 'printer-modal-address' ).value = printerEditing ? printerEditing.address : value;
+            document.getElementById( 'printer-modal-cutter' ).checked = printerEditing
+                ? !!printerEditing.hasCutter
+                : document.getElementById( 'blank-cutter' ).checked;
+
+            hideBoxMessage( 'printer-modal-message' );
+            closePrinterList();
+
+            document.getElementById( 'printer-modal' ).classList.remove( 'hidden' );
+            document.getElementById( printerEditing ? 'printer-modal-address' : 'printer-modal-name' ).focus();
+        }
+
+        function closePrinterDialog() {
+            document.getElementById( 'printer-modal' ).classList.add( 'hidden' );
+
+            hideBoxMessage( 'printer-modal-message' );
+
+            printerEditing = null;
+        }
+
+        function printerDialogKey( event ) {
+            if ( event.key === 'Enter' )  { event.preventDefault(); savePrinterDialog(); }
+            if ( event.key === 'Escape' ) { closePrinterDialog(); }
+        }
+
+        async function savePrinterDialog() {
+            const name      = document.getElementById( 'printer-modal-name' ).value.trim();
+            const address   = document.getElementById( 'printer-modal-address' ).value.trim();
+            const hasCutter = document.getElementById( 'printer-modal-cutter' ).checked;
+
+            if ( !name )    { showBoxMessage( 'printer-modal-message', 'bad', 'Give the printer a name.', '' ); return; }
+            if ( !address ) { showBoxMessage( 'printer-modal-message', 'bad', 'Enter the printer address.', '' ); return; }
+
+            const renamedFrom = printerEditing && printerEditing.name !== name ? printerEditing.name : null;
+
+            let resp;
+
+            try {
+                resp = await authFetch( '/api/printers', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { name: name, address: address, hasCutter: hasCutter } )
+                } );
+            } catch ( e ) {
+                showBoxMessage( 'printer-modal-message', 'bad', 'That could not be saved.', '' );
+
+                return;
+            }
+
+            const data = await resp.json().catch( () => ( {} ) );
+
+            if ( !resp.ok ) {
+                showBoxMessage( 'printer-modal-message', 'bad', escHtml( data.error || 'That could not be saved.' ), '' );
+
+                return;
+            }
+
+            // A rename is a save under the new name and then a tidy-up, so the
+            // old name does not linger in the list as a second printer.
+            if ( renamedFrom ) {
+                try { await authFetch( '/api/printers/' + encodeURIComponent( renamedFrom ), { method: 'DELETE' } ); }
+                catch ( e ) { /* The save worked. A leftover name is not worth failing over. */ }
+            }
+
+            await loadSavedPrinters();
+
+            // Showing the name is the entire point of having saved one.
+            document.getElementById( 'blank-address' ).value = name;
+            document.getElementById( 'blank-cutter' ).checked = hasCutter;
+
+            saveBlankPrefs();
+            closePrinterDialog();
+
+            showBlankMessage( 'ok', 'Saved <strong>' + escHtml( name ) + '</strong>.' );
         }
 
         function showLabelMessage( kind, html ) {
@@ -1589,10 +1793,6 @@
                 if ( prefs.address && !address.value ) address.value = prefs.address;
                 document.getElementById( 'blank-cutter' ).checked = !!prefs.cutter;
                 blankRestored = true;
-
-                // The saved printers load alongside this, so whichever finishes
-                // second has to be the one that reconciles the two.
-                syncPrinterChoice();
             }
 
             // Keep the remembered order for labels that still exist, put anything
@@ -1997,7 +2197,10 @@
         }
 
         async function startBlankRun( isTest ) {
-            const address = document.getElementById( 'blank-address' ).value.trim();
+            // The box may be holding a saved printer's name rather than an
+            // address, so it is resolved here. Everything past this point deals
+            // in addresses, exactly as it did before names existed.
+            const address = printerAddressForRun();
             const labels  = blankOrder.filter( n => blankPicked.has( n ) );
             const mode    = document.getElementById( 'blank-mode' ).value;
             const start   = document.getElementById( 'blank-start' ).value.trim();
