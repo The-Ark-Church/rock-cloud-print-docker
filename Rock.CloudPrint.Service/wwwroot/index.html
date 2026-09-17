@@ -7,6 +7,25 @@
     <link rel="icon" type="image/png" href="/icon.png">
     <link rel="apple-touch-icon" href="/icon.png">
     <link rel="stylesheet" href="/app.css">
+    <script>
+        // Decided before the first paint, so a dark page does not flash white
+        // on the way in. Reads the same key the toggle in the header writes:
+        // a stored choice wins, and the browser's own setting is followed
+        // until somebody makes one.
+        ( function () {
+            try {
+                var chosen = localStorage.getItem( 'rock-cp-theme' );
+                var dark = chosen
+                    ? chosen === 'dark'
+                    : window.matchMedia( '(prefers-color-scheme: dark)' ).matches;
+
+                if ( dark ) document.documentElement.classList.add( 'dark' );
+            } catch ( e ) {
+                // Private browsing, or storage turned off. Light is a fine
+                // thing to fall back to, and the toggle still works.
+            }
+        } )();
+    </script>
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
 
@@ -62,6 +81,22 @@
                             d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
                     Log out
+                </button>
+                <button id="theme-btn" onclick="toggleTheme()" title="Switch to dark"
+                    class="flex items-center text-sm text-gray-500 hover:text-gray-700
+                           transition-colors px-3 py-1.5 rounded-md hover:bg-gray-100
+                           border border-transparent hover:border-gray-200">
+                    <!-- Whichever mode the click leads to. Only one is ever shown. -->
+                    <svg id="theme-icon-moon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                    </svg>
+                    <svg id="theme-icon-sun" class="hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728
+                               0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <span class="sr-only">Switch between light and dark</span>
                 </button>
                 <button onclick="restartService()"
                     class="flex items-center space-x-1.5 text-sm text-gray-500 hover:text-red-600
@@ -823,8 +858,57 @@
             showLoginOverlay();
         }
 
+        // ── Theme ─────────────────────────────────────────────────────────
+        // Follows the browser until somebody presses the toggle, and remembers
+        // the choice from then on. Kept in this browser rather than on the
+        // proxy on purpose: which theme to look at belongs to the person
+        // looking, and two administrators should not fight over it.
+        //
+        // The class itself is put on the root by a script in <head>, before
+        // anything is painted. This only keeps the button in step with it.
+
+        const THEME_KEY = 'rock-cp-theme';
+
+        function storedTheme() {
+            try { return localStorage.getItem( THEME_KEY ); }
+            catch ( e ) { return null; }
+        }
+
+        function applyTheme( dark ) {
+            document.documentElement.classList.toggle( 'dark', dark );
+
+            document.getElementById( 'theme-icon-sun' ).classList.toggle( 'hidden', !dark );
+            document.getElementById( 'theme-icon-moon' ).classList.toggle( 'hidden', dark );
+            document.getElementById( 'theme-btn' ).title = dark ? 'Switch to light' : 'Switch to dark';
+        }
+
+        function toggleTheme() {
+            const dark = !document.documentElement.classList.contains( 'dark' );
+
+            try { localStorage.setItem( THEME_KEY, dark ? 'dark' : 'light' ); }
+            catch ( e ) { /* Not remembered, but still applied for this visit. */ }
+
+            applyTheme( dark );
+        }
+
+        function initTheme() {
+            applyTheme( document.documentElement.classList.contains( 'dark' ) );
+
+            // Keep following the browser while nobody has chosen, so a machine
+            // set to switch at sunset does. Somebody who has chosen keeps what
+            // they chose.
+            window.matchMedia( '(prefers-color-scheme: dark)' )
+                .addEventListener( 'change', event => {
+                    if ( !storedTheme() ) applyTheme( event.matches );
+                } );
+        }
+
         // ── Boot ──────────────────────────────────────────────────────────
         async function boot() {
+            // Before anything else, and before the login overlay, so the PIN
+            // screen is the same theme as the page behind it.
+            initTheme();
+
             try {
                 const resp = await fetch( '/api/auth/config' );
                 const cfg  = await resp.json();
