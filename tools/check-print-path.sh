@@ -30,6 +30,7 @@ new_files=(
     Rock.CloudPrint.Service/LabelCapture.cs
     Rock.CloudPrint.Service/LabelPreview.cs
     Rock.CloudPrint.Service/LabelStore.cs
+    Rock.CloudPrint.Service/PrinterBook.cs
     Rock.CloudPrint.Service/PrinterSocket.cs
     Rock.CloudPrint.Service/SecurityCode.cs
     Rock.CloudPrint.Service/ZplTemplate.cs

@@ -72,6 +72,7 @@ public class Program
         builder.Services.AddSingleton<PrinterTester>();
         builder.Services.AddSingleton<LabelStore>();
         builder.Services.AddSingleton<BlankLabelStateStore>();
+        builder.Services.AddSingleton<PrinterBook>();
         builder.Services.AddSingleton<BlankLabelRunner>();
         builder.Services.AddSingleton<LabelCapture>();
 
@@ -437,6 +438,50 @@ public class Program
 
             return Results.Ok( result );
         } ).RequireRateLimiting( "printertest" );
+
+        // The printers somebody has named, so blanks can be printed by choosing
+        // one rather than by knowing where it is. Shared, because the browser's
+        // own storage remembers an address for one person on one machine, which
+        // is no help at all to the next administrator who has to print.
+        //
+        // Nothing in the print path reads this. A run is still given an address;
+        // this only decides what is offered.
+
+        app.MapGet( "/api/printers", ( PrinterBook printers ) =>
+            Results.Ok( printers.List().Select( printer => new
+            {
+                name      = printer.Name,
+                address   = printer.Address,
+                hasCutter = printer.HasCutter
+            } ) ) );
+
+        app.MapPost( "/api/printers", ( SavePrinterRequest request, PrinterBook printers ) =>
+        {
+            var name = ( request.Name ?? string.Empty ).Trim();
+            var address = ( request.Address ?? string.Empty ).Trim();
+
+            return printers.Save( name, address, request.HasCutter ?? false ) switch
+            {
+                PrinterSaveOutcome.Saved => Results.Ok( new { name, address, hasCutter = request.HasCutter ?? false } ),
+                PrinterSaveOutcome.InvalidName => Results.Json( new { error = $"A printer name can be up to {PrinterBook.MaxNameLength} letters, digits, spaces, dots, dashes and underscores." }, statusCode: 400 ),
+                PrinterSaveOutcome.InvalidAddress => Results.Json( new { error = "That is not an address this could print to. Use an IP address, with an optional port." }, statusCode: 400 ),
+                PrinterSaveOutcome.TooMany => Results.Json( new { error = $"There is room for {PrinterBook.MaxPrinters} saved printers. Remove one first." }, statusCode: 409 ),
+                _ => Results.Json( new { error = "That printer could not be saved." }, statusCode: 400 )
+            };
+        } );
+
+        app.MapDelete( "/api/printers/{name}", ( string name, PrinterBook printers ) =>
+        {
+            // The route value is checked exactly as a saved name is, for the
+            // same reason it is on labels: a route segment is caller-supplied
+            // input and it is the one people forget.
+            if ( !PrinterBook.IsValidName( name ) )
+                return Results.Json( new { error = "That is not a printer name." }, statusCode: 400 );
+
+            return printers.Delete( name )
+                ? Results.Ok( new { deleted = name } )
+                : Results.Json( new { error = $"There is no printer called '{name}'." }, statusCode: 404 );
+        } );
 
         // Returns the notification settings. The secret is never sent back - only
         // whether one is set - so it cannot be read out of the UI.
@@ -931,6 +976,13 @@ internal record SettingsRequest( string Url, string Name, string Id );
 internal record LoginRequest( string Password );
 internal record SecurityRequest( string? CurrentPassword, string? NewPassword );
 internal record PrinterTestRequest( string? Address, string? Mode );
+
+/// <summary>
+/// Naming a printer. <c>HasCutter</c> is remembered with it because it is a
+/// fact about the machine rather than about a run, and whoever picks the
+/// printer by name is exactly the person who would not know it.
+/// </summary>
+internal record SavePrinterRequest( string? Name, string? Address, bool? HasCutter );
 
 /// <summary>
 /// A label template being uploaded. The content is base64 so that arbitrary
