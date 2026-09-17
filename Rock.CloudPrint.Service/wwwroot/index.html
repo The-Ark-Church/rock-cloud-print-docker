@@ -305,13 +305,20 @@
                     leaves empty space with nothing to say what goes where.
                 </p>
 
+                <p class="text-gray-500">
+                    This proxy is at
+                    <code id="capture-address" class="bg-white px-1 rounded border border-gray-200">…</code>
+                </p>
+
                 <ol class="list-decimal ml-4 space-y-1 text-gray-700">
                     <li>Press <strong>Wait for a label</strong> below</li>
+                    <li>In Rock, Select a Label</li>
+                    <li>Click Label Designer</li>
+                    <li>Select Preview</li>
                     <li>
-                        In Rock, preview a label you created (new designer, or legacy). This proxy is at
-                        <code id="capture-address" class="bg-white px-1 rounded border border-gray-200">…</code>
+                        Print a label to the device you created in the preview window, then come back
+                        to the print proxy capture screen
                     </li>
-                    <li>Print a label to the device you created.</li>
                     <li>Choose which field holds the security code, give it a name, and save</li>
                 </ol>
 
@@ -362,28 +369,33 @@
 
             <div id="label-help" class="hidden mt-3 rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-2">
                 <p>
-                    Pre-coded blanks for people to fill in by hand when check-in is down. Every copy
-                    carries one security code shared by all of its labels, so a child's tag and a
-                    parent's receipt still match at pickup. Print them in advance — this needs
-                    nothing from Rock, which is the point.
+                    <strong>What is Provided</strong><br>
+                    This application includes 3 Pre-coded blanks for people to fill in by hand when
+                    check-in is down. Every copy carries one security code shared by all of its
+                    labels, so a child's tag and a parent's receipt still match at pickup.
                 </p>
                 <p>
-                    A label is a ZPL file. You can create it in the Rock Label designer (Next-Gen or
-                    Legacy), or in any label designer that generates ZPL. Add
-                    <code class="bg-white px-1 rounded border border-gray-200">WWW</code> where the code
-                    goes and it will be replaced with the security code generated here. Upload new ones
-                    here, or use the built in labels. Tick the ones that you want to print as a set and
-                    use the arrows to order them. The size is fixed in the file (your label ZPL), so
-                    load matching label stock in your printer. How many characters a code can have is
-                    fixed in the label you upload so make sure your security code length matches, e.g.
-                    the default labels are set up for a 3 random character security code so setting 3 on
-                    the security code length is correct, any more than that and the characters might not
-                    display.
+                    <strong>How Made</strong><br>
+                    A label is a ZPL file. You can generate a label file a few different ways, how you
+                    do it is up to you. You can use Labelary, Zebra Label Designer, write the ZPL
+                    yourself if you are a nerd (like I did). Once you have generated a file you can
+                    upload them. You can also create a label in the Rock Label designer
+                    <strong>Next-Gen Only</strong>, and use the capture feature to add them
+                    <strong>the easy way</strong>. Once you have labels, tick the checkboxes on the ones
+                    that you want to print as a set, and use the arrows to order them. The size is fixed
+                    in the file (your label ZPL), so load matching label stock in your printer. How many
+                    characters a code can have is fixed in the label you upload so make sure your
+                    security code length matches, e.g. the default labels are set up for a 3 random
+                    character security code, so setting 3 on the security code length is correct, any
+                    more than that and the characters might not display.
                 </p>
                 <p>
-                    Pick a printer that is not serving check-in. Sequential codes are remembered
-                    between runs and reserved before anything is sent, so a failed run leaves a gap
-                    rather than repeating itself later.
+                    <strong>Tips</strong><br>
+                    Add <code class="bg-white px-1 rounded border border-gray-200">WWW</code> where the
+                    code goes and it will be replaced with the security code generated here.
+                    Pick a printer that is not serving check-in.
+                    Sequential codes are remembered between runs and reserved before anything is sent,
+                    so a failed run leaves a gap rather than repeating itself later.
                 </p>
             </div>
 
@@ -478,6 +490,7 @@
                     Print labels
                 </button>
                 <button onclick="previewLabel()"
+                    title="View a preview of the labels that will be printed. This uses Labelary to generate a preview of the labels and will display them in a popup modal."
                     class="px-3.5 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium
                            rounded-md hover:bg-gray-50 transition-colors">
                     Preview
