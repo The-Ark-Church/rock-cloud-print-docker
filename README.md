@@ -27,10 +27,15 @@ This is commonly used for check-in label printing where the printers are on a lo
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-plugin
+sudo apt-get install -y docker.io docker-compose-v2
 sudo systemctl enable --now docker
 sudo usermod -aG docker $USER   # lets you run docker without sudo (re-login after)
 ```
+
+`docker-compose-v2` is Ubuntu's package for Compose v2 — the same `docker compose`
+command. The name `docker-compose-plugin` you will see elsewhere only resolves if
+you have added Docker's own apt repository first, and fails on a stock Ubuntu with
+`Unable to locate package`.
 
 ---
 
@@ -150,7 +155,13 @@ The container ships with several baseline protections that are always on:
 
 ### PIN protection
 
-The web UI can be protected by a PIN or password. Anyone who can reach port 8080 can view and change all settings, so you should enable this if the server is reachable outside your local network, or if you simply want an extra layer of protection.
+The web UI can be protected by a PIN or password. **Set one.**
+
+Anyone who can reach port 8080 can view and change every setting. They can also
+upload a label and print it to any address they choose, which means the port
+offers a way to send arbitrary bytes to any host and port on your network. That
+is inherent to what a print proxy does — but it makes the PIN worth setting even
+on a network you trust, not only on one exposed beyond it.
 
 ### Set a PIN via the web UI (recommended)
 
@@ -361,6 +372,216 @@ printer, so a genuine second outage is reported even if it follows closely.
 
 ---
 
+## Blank labels
+
+When check-in goes down, families fill in labels by hand. That only works if a
+supply of pre-printed blanks already exists, and each blank has to carry a
+**security code** — the same code on the child's tag and on the parent's
+receipt, so pickup still matches when the names are handwritten.
+
+This prints them.
+
+**It needs nothing from Rock, and that is the entire point.** The proxy already
+holds the templates and already talks to the printers, so it can print blanks
+when the Rock server is unreachable — which is the situation blanks exist for.
+Print them well in advance, not during the outage.
+
+### Printing labels
+
+1. Open the **Blank Labels** tab.
+2. Tick the labels that make up one copy, and use the arrows to put them in the
+   order they should print. **The order matters if any of them cuts** — see
+   below.
+3. Enter the printer's IP address.
+4. Choose how many **copies** and whether codes are random or sequential.
+5. Press **Preview** to see the label, or **Print one test copy** to check the
+   printer and the stock.
+6. Press **Print labels**.
+
+Three demo templates are included, so there is something to print on a fresh
+install.
+
+### Choose a printer that is not serving check-in
+
+Nothing in the proxy stops two things printing to the same printer at once. If
+a blank run and a real check-in print land on one printer together, their data
+can interleave and both come out wrong.
+
+In practice this is avoided by circumstance rather than by code: whoever prints
+blanks is stood at the printer and types its address in by hand, it is usually a
+desk printer rather than a check-in one, and it is not happening during a
+service. Keep it that way.
+
+### The labels
+
+A label is a ZPL file with a placeholder wherever the security code should go.
+The proxy stores it and prints it; it does not edit ZPL and has no designer.
+
+Two placeholders are recognised:
+
+| | |
+|---|---|
+| `WWW` | The same placeholder Rock's own legacy check-in labels use, so a label designed in Rock needs no editing afterwards. Recognised only when it is the **whole** of a field — three letters turn up by accident in a way three question marks do not, and a field reading `www.example.com` should not have a code substituted into the middle of it |
+| `???` | Recognised anywhere inside a field, so it can sit among other text. The supplied demo templates use this |
+
+Write them in a text editor, in Zebra's designer, or in Rock's — whatever
+produces ZPL. Upload the file on the **Blank Labels** tab. It is rejected if it
+is not ZPL, if it is over a megabyte, or if there is no placeholder inside a
+`^FD` field, since a blank with nowhere to put a code is not a blank. A
+placeholder in a `^FX` comment does not count, because a comment is never
+printed.
+
+**The size is fixed in the template.** `^PW` and `^LL` set the printable width
+and label length in dots, so a template written for 3x2 stock prints 3x2
+whatever is loaded. The size is shown beside each label; load the stock that
+matches.
+
+**Anything that cuts, put last.** A template carrying `^MMC` puts the printer in
+cutter mode, so the cut falls after that label. Put it anywhere but last in the
+order and the cut lands in the middle of a copy. The included roster label is
+the one that cuts, which is why it is last.
+
+The three demos can be deleted like any other label. They are published in this
+repository, so a deleted one can be downloaded from
+`Rock.CloudPrint.Service/Labels/` and uploaded again.
+
+### Codes
+
+**Random** codes are drawn from 32 characters with no `0`, `O`, `1` or `I` in
+them, because somebody reads the code off a label and says it out loud at a
+pickup desk. They are deduplicated within a run.
+
+**Sequential** codes count up from a number you give, and **the proxy remembers
+where it got to**, so labels printed in March and labels printed in June
+cannot carry the same numbers. Leave the start blank to carry on from where the
+last run finished.
+
+**Codes are reserved before anything is sent to the printer.** If a run fails
+half way, the codes it reserved stay used and the next run carries on past them.
+That leaves a gap in the numbering, which is harmless — a repeat would not be.
+
+If the proxy cannot read its record of used codes, it says so and asks for a
+starting number rather than guessing. Starting again from 1 would silently
+reissue every code already printed, so it will not do that on its own.
+
+A blank's code colliding with a real one Rock issued is not a problem in
+practice: the parent is holding the matching half and the handwritten names
+differ, so a volunteer sees the mismatch.
+
+A security code is printed large enough to read at a glance, so how many
+characters fit is decided by the label, not by this setting. **The three demo
+templates are designed for three**, which is the common case. Longer codes are
+clipped rather than shrunk, so check before committing to a run — the preview
+draws a real code, and **Print one test copy** prints W repeated to your chosen
+length, W being the widest character a code can contain.
+
+If you want longer codes, that is a change to the label rather than to the
+proxy: upload your own template with the field laid out for it.
+
+### "Handed to the printer" is not "printed"
+
+The run panel counts copies **handed to the printer**, and the wording is
+deliberate. A completed network write only means the operating system accepted
+the bytes — measured on a development machine, close to a megabyte can still be
+sitting in buffers after a printer has stopped reading. So the count is what
+this end handed over, which is all it can honestly claim. Look at the labels.
+
+**There is no time limit on a run, by design.** A printer that runs out of
+labels pauses and carries on when it is reloaded, even if nobody is there when
+it stops — so a run that is taking a while is usually a printer waiting for
+paper, not a failure. The only thing that ends a run early is **Cancel**.
+
+One run happens at a time. A second is refused rather than queued.
+
+### Cutting
+
+If the printer has a cutter, tick **Has cutter** beside the printer address and
+the proxy sends the cut commands itself — one cut after the last label of each
+copy, so a child's tag, a parent's receipt and a roster label come off together.
+
+It is a setting for that run, not a saved printer: the proxy has no printer
+records.
+
+This is worth ticking even if your labels already carry `^MMC`, because it means
+the cut no longer depends on which label happens to be last in the order. The
+commands are the same ones Rock sends during check-in — the label's trailing
+`^XZ` becomes `^MMC^XZ` to cut, or `^XB^XZ` to suppress the backfeed and the cut
+with it. They are appended, so a template's own `^MMT` or `^MMC` does not have to
+be removed; ZPL takes the last command it is given.
+
+Leave it unticked and nothing is added, so a label that cuts by itself still
+behaves exactly as it did.
+
+### Capturing a label from Rock
+
+Rock will not hand out the ZPL for a label designed in its own designer. But the
+proxy sits in the middle of every print, so a label Rock prints arrives as raw
+ZPL whatever it was authored as — and **Capture from Rock** catches one by being
+an ordinary printer.
+
+**This is for a label you designed *as a blank*** — with lines to write on and a
+placeholder where the code goes. A normal check-in label will not do. Designed
+labels write text straight into fields and carry nothing to write on, because
+nothing is ever hand-written on them, so blanking one leaves empty space with no
+indication of what goes where.
+
+1. On the **Blank Labels** tab, press **Capture from Rock**, then **Wait for a
+   label**. It listens on port 9100 by default.
+2. In Rock, set a printer's address to this machine and print one label to it. A
+   check-in label's test print does it. No port is needed — an address without
+   one means 9100.
+3. Pick which fields hold the security code, name the label, and save.
+
+**Nothing here needs to be connected to Rock.** Whichever proxy Rock already
+sends that label to is the one that opens the connection, so the address only has
+to be reachable *from that proxy* — it is an ordinary printer address as far as
+it is concerned. It can be a different machine entirely. If the proxy you are
+capturing with is itself the one Rock routes to, use `127.0.0.1:9100` and nothing
+crosses a network at all.
+
+It listens only while armed and stops after one label, so arming it and
+forgetting cannot quietly record a real child's label during a service. A
+connection that sends nothing — a reachability check, a port scan, the proxy's
+own printer test — is ignored and it keeps waiting.
+
+#### The security code field is usually empty
+
+Expect this, because it looks like something has gone wrong and has not.
+
+Rock's stored ZPL uses a token such as `WWW` where the security code goes, but by
+the time a label is *printed* Rock has already substituted it. A test print has
+no attendance behind it, so it substitutes to **nothing** — and the code field
+arrives empty.
+
+That is why fields are chosen by position rather than by text, and why the list
+shows the height of each field's font. The security code is the one thing on a
+check-in label printed large, so on a real label it stands out from the captions
+by a factor of three or four. The tallest fields are ticked for you.
+
+Pick more than one where the label needs it — a receipt torn in half carries the
+code on both halves.
+
+### Preview
+
+The preview is drawn by [Labelary](https://labelary.com/), the same service
+Rock's own label designer uses, so **this one button needs internet access.
+Printing does not.** If there is no internet the preview reports that and
+everything else carries on working.
+
+The proxy fetches the image itself and sends it to your browser, so the browser
+never contacts a third party.
+
+### Files it writes
+
+| Path | What it is |
+|---|---|
+| `config/labels/*.zpl` | The stored templates |
+| `config/blank-labels.json` | Where sequential numbering has reached, and the last ten runs |
+
+Both are inside `config`, so whatever backs that up already covers them.
+
+---
+
 ## Web UI reference
 
 | Page | What it shows |
@@ -368,6 +589,7 @@ printer, so a genuine second outage is reported even if it follows closely.
 | **Dashboard** | Connection status (green/amber/grey), start time, time connected, labels requested since start, and a Print Results panel: labels printed, labels failed, prints that finished too slowly, and the reason for the most recent failure |
 | **Logs** | Live service log stream, color-coded by level |
 | **Printers** | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
+| **Blank Labels** | Store ZPL templates and print pre-coded blank check-in labels. Works with Rock unreachable — see above |
 | **Settings → Failure Notifications** | Tell Rock when a printer fails. Requires Rock-side setup first — see above |
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
 | **Settings → Security** | Set, change, or remove the web UI PIN |

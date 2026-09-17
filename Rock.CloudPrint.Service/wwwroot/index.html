@@ -7,6 +7,25 @@
     <link rel="icon" type="image/png" href="/icon.png">
     <link rel="apple-touch-icon" href="/icon.png">
     <link rel="stylesheet" href="/app.css">
+    <script>
+        // Decided before the first paint, so a dark page does not flash white
+        // on the way in. Reads the same key the toggle in the header writes:
+        // a stored choice wins, and the browser's own setting is followed
+        // until somebody makes one.
+        ( function () {
+            try {
+                var chosen = localStorage.getItem( 'rock-cp-theme' );
+                var dark = chosen
+                    ? chosen === 'dark'
+                    : window.matchMedia( '(prefers-color-scheme: dark)' ).matches;
+
+                if ( dark ) document.documentElement.classList.add( 'dark' );
+            } catch ( e ) {
+                // Private browsing, or storage turned off. Light is a fine
+                // thing to fall back to, and the toggle still works.
+            }
+        } )();
+    </script>
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
 
@@ -63,6 +82,22 @@
                     </svg>
                     Log out
                 </button>
+                <button id="theme-btn" onclick="toggleTheme()" title="Switch to dark"
+                    class="flex items-center text-sm text-gray-500 hover:text-gray-700
+                           transition-colors px-3 py-1.5 rounded-md hover:bg-gray-100
+                           border border-transparent hover:border-gray-200">
+                    <!-- Whichever mode the click leads to. Only one is ever shown. -->
+                    <svg id="theme-icon-moon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                    </svg>
+                    <svg id="theme-icon-sun" class="hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728
+                               0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <span class="sr-only">Switch between light and dark</span>
+                </button>
                 <button onclick="restartService()"
                     class="flex items-center space-x-1.5 text-sm text-gray-500 hover:text-red-600
                            transition-colors px-3 py-1.5 rounded-md hover:bg-red-50
@@ -91,6 +126,10 @@
             <button id="tab-printers" onclick="showTab('printers')"
                 class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
                 Printers
+            </button>
+            <button id="tab-labels" onclick="showTab('labels')"
+                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
+                Blank Labels
             </button>
             <button id="tab-settings" onclick="showTab('settings')"
                 class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
@@ -222,6 +261,341 @@
             <div id="printer-test-result" class="hidden mt-4 rounded-md p-3 text-sm"></div>
         </div>
 
+    </div>
+
+    <!-- ── Blank labels ──────────────────────────────────────────────── -->
+    <div id="pane-labels" class="hidden max-w-4xl mx-auto px-6 mt-6 pb-12 space-y-4">
+
+        <!-- Labels ────────────────────────────────────────────────────── -->
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-sm font-semibold text-gray-900">Labels</h2>
+                    <button onclick="toggleLabelHelp()" title="How blank labels work"
+                        class="h-4 w-4 rounded-full border border-gray-300 text-gray-400 text-xs leading-none
+                               hover:border-gray-500 hover:text-gray-700">?</button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleCapture()"
+                        class="text-sm font-medium text-blue-600 hover:text-blue-700">Capture from Rock</button>
+                    <label class="text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer">
+                        Upload
+                        <input id="label-upload" type="file" accept=".zpl,.prn,.txt"
+                               class="hidden" onchange="uploadLabel(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Capture ───────────────────────────────────────────────────
+                 Rock will not hand out the ZPL for a label designed in its own
+                 designer, but the proxy is in the middle of every print. This
+                 waits for one, by being an ordinary printer. -->
+            <div id="capture-panel" class="hidden mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 space-y-2">
+                <p>
+                    Rock will not give you the ZPL for a label designed in its own designer. This gets
+                    it by <strong>being a printer</strong>: Rock sends the label here as if this were a
+                    printer, and this catches it instead of paper coming out. You will need to set up a
+                    new Printer Device in Rock and add this print proxy's IP address to the printer. You
+                    can then use the Label Designer's preview window to "print" to the newly created
+                    printer device you created. That will send it here for capture.
+                </p>
+                <p class="text-gray-500">
+                    For a label you designed <strong>as a blank</strong> — with lines to write on and a
+                    placeholder where the code goes. A normal check-in label will not do: blanking one
+                    leaves empty space with nothing to say what goes where.
+                </p>
+
+                <p class="text-gray-500">
+                    This proxy is at
+                    <code id="capture-address" class="bg-white px-1 rounded border border-gray-200">…</code>
+                </p>
+
+                <ol class="list-decimal ml-4 space-y-1 text-gray-700">
+                    <li>Press <strong>Wait for a label</strong> below</li>
+                    <li>In Rock, Select a Label</li>
+                    <li>Click Label Designer</li>
+                    <li>Select Preview</li>
+                    <li>
+                        Print a label to the device you created in the preview window, then come back
+                        to the print proxy capture screen
+                    </li>
+                    <li>Choose which field holds the security code, give it a name, and save</li>
+                </ol>
+
+                <p class="text-gray-500">
+                    Nothing here needs to be connected to Rock. Whichever proxy Rock already sends that
+                    label to is the one that opens the connection, so <strong>the address only has to be
+                    reachable from that proxy</strong> — it is an ordinary printer address as far as it
+                    is concerned. If that proxy is on another machine or another subnet, the address
+                    above has to be routable from there. Note that this also works with printing from
+                    the Rock server as well. No other print proxy is needed.
+                </p>
+                <p id="capture-loopback-note" class="text-gray-500"></p>
+
+                <div class="flex items-center gap-2 pt-1">
+                    <label class="text-gray-500">Port</label>
+                    <input id="capture-port" type="number" min="1" max="65535" value="9100"
+                        oninput="updateCaptureAddress()"
+                        class="w-20 border border-gray-300 rounded px-2 py-1 text-xs tabular-nums
+                               focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    <button id="capture-arm-btn" onclick="armCapture()"
+                        class="px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded
+                               hover:bg-blue-700">Wait for a label</button>
+                    <button id="capture-stop-btn" onclick="disarmCapture()"
+                        class="hidden px-2.5 py-1 bg-white border border-gray-300 text-gray-700 text-xs
+                               font-medium rounded hover:bg-gray-50">Stop</button>
+                    <span id="capture-state" class="text-gray-500"></span>
+                </div>
+
+                <div id="capture-result" class="hidden border-t border-gray-200 pt-2 space-y-2">
+                    <p class="text-gray-700">Which fields hold the security code?</p>
+                    <p id="capture-hint" class="text-gray-500"></p>
+                    <div id="capture-fields" class="space-y-1"></div>
+                    <div class="flex items-center gap-2">
+                        <input id="capture-name" type="text" placeholder="Name this label" maxlength="64"
+                            class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs
+                                   focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        <button onclick="saveCapture()"
+                            class="px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded
+                                   hover:bg-blue-700">Save</button>
+                        <button onclick="discardCapture()"
+                            class="px-2.5 py-1 bg-white border border-gray-300 text-gray-700 text-xs
+                                   font-medium rounded hover:bg-gray-50">Discard</button>
+                    </div>
+                </div>
+
+                <div id="capture-message" class="hidden rounded p-2"></div>
+            </div>
+
+            <div id="label-help" class="hidden mt-3 rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-2">
+                <p>
+                    <strong>What is Provided</strong><br>
+                    This application includes 3 Pre-coded blanks for people to fill in by hand when
+                    check-in is down. Every copy carries one security code shared by all of its
+                    labels, so a child's tag and a parent's receipt still match at pickup.
+                </p>
+                <p>
+                    <strong>How Made</strong><br>
+                    A label is a ZPL file. You can generate a label file a few different ways, how you
+                    do it is up to you. You can use Labelary, Zebra Label Designer, write the ZPL
+                    yourself if you are a nerd (like I did). Once you have generated a file you can
+                    upload them. You can also create a label in the Rock Label designer
+                    <strong>Next-Gen Only</strong>, and use the capture feature to add them
+                    <strong>the easy way</strong>. Once you have labels, tick the checkboxes on the ones
+                    that you want to print as a set, and use the arrows to order them. The size is fixed
+                    in the file (your label ZPL), so load matching label stock in your printer. How many
+                    characters a code can have is fixed in the label you upload so make sure your
+                    security code length matches, e.g. the default labels are set up for a 3 random
+                    character security code, so setting 3 on the security code length is correct, any
+                    more than that and the characters might not display.
+                </p>
+                <p>
+                    <strong>Tips</strong><br>
+                    Add <code class="bg-white px-1 rounded border border-gray-200">WWW</code> where the
+                    code goes and it will be replaced with the security code generated here.
+                    Pick a printer that is not serving check-in.
+                    Sequential codes are remembered between runs and reserved before anything is sent,
+                    so a failed run leaves a gap rather than repeating itself later.
+                </p>
+            </div>
+
+            <div id="label-list" class="mt-2"></div>
+            <div id="label-message" class="hidden mt-2 rounded-md p-2 text-xs"></div>
+        </div>
+
+        <!-- Print ─────────────────────────────────────────────────────── -->
+        <div class="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-900">Print labels</h2>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="col-span-2">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Printer</label>
+                    <div class="flex items-center gap-2">
+                        <!-- One box. It takes a saved printer's name or an
+                             address, and the list under it narrows as you type.
+                             Whoever saved the printer typed the address once;
+                             everybody after them types the name. -->
+                        <div class="relative flex-1 min-w-0">
+                            <input id="blank-address" type="text" autocomplete="off"
+                                placeholder="Printer name, or 192.168.1.50"
+                                oninput="printerTyped()" onfocus="openPrinterList()"
+                                onkeydown="printerListKey(event)" onblur="closePrinterList()"
+                                class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                            <div id="printer-list"
+                                class="hidden absolute z-30 mt-1 w-full max-h-56 overflow-auto bg-white
+                                       border border-gray-200 rounded-md shadow-lg py-1"></div>
+                        </div>
+                        <button id="blank-printer-add" type="button" onclick="openPrinterDialog()"
+                            title="Save this printer"
+                            class="shrink-0 border border-gray-300 rounded-md px-2.5 py-1.5 text-sm leading-none
+                                   text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">+</button>
+                        <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer whitespace-nowrap"
+                            title="Cuts after the last label of each copy, so one copy comes off together. The proxy sends the cut command itself, so the label does not have to carry one. Use this if your printer has a cutter.">
+                            <input id="blank-cutter" type="checkbox" onchange="saveBlankPrefs()"
+                                class="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Has cutter
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Copies</label>
+                    <input id="blank-quantity" type="number" min="1" value="50" oninput="updateBlankTotals()"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm tabular-nums
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Codes</label>
+                    <select id="blank-mode" onchange="updateBlankMode()"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="random">Random</option>
+                        <option value="sequential">Sequential</option>
+                    </select>
+                </div>
+
+                <div id="blank-length-field">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Length</label>
+                    <input id="blank-length" type="number" min="1" max="8" value="3"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm tabular-nums
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                </div>
+
+                <div id="blank-start-field" class="hidden">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Start at</label>
+                    <input id="blank-start" type="text" inputmode="numeric" placeholder="0001"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm tabular-nums
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Prefix</label>
+                    <input id="blank-prefix" type="text" maxlength="8"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                </div>
+            </div>
+
+            <p id="blank-totals" class="text-xs text-gray-500">&nbsp;</p>
+            <p id="blank-sequential-note" class="hidden text-xs text-gray-500"></p>
+
+            <div id="blank-message" class="hidden rounded-md p-2 text-xs"></div>
+
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+                <button id="blank-print-btn" onclick="startBlankRun(false)"
+                    class="px-3.5 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md
+                           hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    Print labels
+                </button>
+                <button onclick="previewLabel()"
+                    title="View a preview of the labels that will be printed. This uses Labelary to generate a preview of the labels and will display them in a popup modal."
+                    class="px-3.5 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium
+                           rounded-md hover:bg-gray-50 transition-colors">
+                    Preview
+                </button>
+                <button onclick="startBlankRun(true)"
+                    title="Prints one copy with the code set to W repeated to your code length. W is the widest character a code can contain, so if it fits, every code of that length will fit. It does not move the sequential counter."
+                    class="px-3.5 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium
+                           rounded-md hover:bg-gray-50 transition-colors">
+                    Print one test copy
+                </button>
+            </div>
+        </div>
+
+        <!-- The run in progress ───────────────────────────────────────── -->
+        <div id="blank-run" class="hidden bg-white rounded-lg border border-gray-200 p-4">
+            <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                    <h2 id="blank-run-title" class="text-sm font-semibold text-gray-900">Printing</h2>
+                    <p id="blank-run-detail" class="mt-0.5 text-sm text-gray-600 tabular-nums"></p>
+                    <p id="blank-run-codes" class="mt-0.5 text-xs text-gray-500 tabular-nums"></p>
+                </div>
+                <button id="blank-cancel-btn" onclick="cancelBlankRun()"
+                    class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium
+                           rounded-md hover:bg-gray-50 transition-colors whitespace-nowrap">
+                    Cancel
+                </button>
+            </div>
+            <div class="mt-2.5 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                <div id="blank-run-bar" class="h-full w-0 bg-blue-600 transition-all"></div>
+            </div>
+        </div>
+
+        <!-- Previous runs ─────────────────────────────────────────────── -->
+        <div id="blank-history-card" class="hidden bg-white rounded-lg border border-gray-200 p-4">
+            <h2 class="text-sm font-semibold text-gray-900">Recent runs</h2>
+            <div id="blank-history" class="mt-1"></div>
+        </div>
+
+    </div>
+
+    <!-- Preview, over the page ──────────────────────────────────────────
+         One copy's worth of labels, all carrying the same code, because that
+         is what a copy is. -->
+    <div id="preview-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" onclick="closePreview()"></div>
+        <div class="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-full flex flex-col">
+            <div class="flex items-start justify-between gap-4 px-4 py-3 border-b border-gray-200">
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-900">Preview</h3>
+                    <p id="preview-subtitle" class="mt-0.5 text-xs text-gray-500"></p>
+                </div>
+                <button onclick="closePreview()" title="Close"
+                    class="text-gray-400 hover:text-gray-700 text-lg leading-none px-1">&times;</button>
+            </div>
+            <div id="preview-body" class="p-4 space-y-4 overflow-auto"></div>
+        </div>
+    </div>
+
+    <!-- Naming a printer, so the next person can pick it out of a list without
+         being told an IP address. Fields rather than a browser prompt, because
+         there are three of them and one is a checkbox. -->
+    <div id="printer-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" onclick="closePrinterDialog()"></div>
+        <div class="relative bg-white rounded-lg shadow-xl w-full max-w-sm flex flex-col">
+            <div class="flex items-start justify-between gap-4 px-4 py-3 border-b border-gray-200">
+                <h3 id="printer-modal-title" class="text-sm font-semibold text-gray-900">Save this printer</h3>
+                <button onclick="closePrinterDialog()" title="Close"
+                    class="text-gray-400 hover:text-gray-700 text-lg leading-none px-1">&times;</button>
+            </div>
+
+            <div class="p-4 space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                    <input id="printer-modal-name" type="text" maxlength="40" placeholder="Kids Check-in"
+                        onkeydown="printerDialogKey(event)"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p class="mt-1 text-xs text-gray-500">What people will pick from the list.</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">IP address</label>
+                    <input id="printer-modal-address" type="text" placeholder="192.168.1.50"
+                        onkeydown="printerDialogKey(event)"
+                        class="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <p class="mt-1 text-xs text-gray-500">With a port if it is not 9100.</p>
+                </div>
+
+                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input id="printer-modal-cutter" type="checkbox"
+                        class="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    Has cutter
+                </label>
+
+                <div id="printer-modal-message" class="hidden rounded-md p-2 text-xs"></div>
+            </div>
+
+            <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-200">
+                <button onclick="closePrinterDialog()"
+                    class="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onclick="savePrinterDialog()"
+                    class="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700">Save</button>
+            </div>
+        </div>
     </div>
 
     <!-- ── Settings ──────────────────────────────────────────────────── -->
@@ -497,8 +871,57 @@
             showLoginOverlay();
         }
 
+        // ── Theme ─────────────────────────────────────────────────────────
+        // Follows the browser until somebody presses the toggle, and remembers
+        // the choice from then on. Kept in this browser rather than on the
+        // proxy on purpose: which theme to look at belongs to the person
+        // looking, and two administrators should not fight over it.
+        //
+        // The class itself is put on the root by a script in <head>, before
+        // anything is painted. This only keeps the button in step with it.
+
+        const THEME_KEY = 'rock-cp-theme';
+
+        function storedTheme() {
+            try { return localStorage.getItem( THEME_KEY ); }
+            catch ( e ) { return null; }
+        }
+
+        function applyTheme( dark ) {
+            document.documentElement.classList.toggle( 'dark', dark );
+
+            document.getElementById( 'theme-icon-sun' ).classList.toggle( 'hidden', !dark );
+            document.getElementById( 'theme-icon-moon' ).classList.toggle( 'hidden', dark );
+            document.getElementById( 'theme-btn' ).title = dark ? 'Switch to light' : 'Switch to dark';
+        }
+
+        function toggleTheme() {
+            const dark = !document.documentElement.classList.contains( 'dark' );
+
+            try { localStorage.setItem( THEME_KEY, dark ? 'dark' : 'light' ); }
+            catch ( e ) { /* Not remembered, but still applied for this visit. */ }
+
+            applyTheme( dark );
+        }
+
+        function initTheme() {
+            applyTheme( document.documentElement.classList.contains( 'dark' ) );
+
+            // Keep following the browser while nobody has chosen, so a machine
+            // set to switch at sunset does. Somebody who has chosen keeps what
+            // they chose.
+            window.matchMedia( '(prefers-color-scheme: dark)' )
+                .addEventListener( 'change', event => {
+                    if ( !storedTheme() ) applyTheme( event.matches );
+                } );
+        }
+
         // ── Boot ──────────────────────────────────────────────────────────
         async function boot() {
+            // Before anything else, and before the login overlay, so the PIN
+            // screen is the same theme as the page behind it.
+            initTheme();
+
             try {
                 const resp = await fetch( '/api/auth/config' );
                 const cfg  = await resp.json();
@@ -529,7 +952,7 @@
 
         // ── Tab management ────────────────────────────────────────────────
         function showTab( tab ) {
-            ['dashboard', 'logs', 'printers', 'settings'].forEach( t => {
+            ['dashboard', 'logs', 'printers', 'labels', 'settings'].forEach( t => {
                 const btn   = document.getElementById( 'tab-' + t );
                 const pane  = document.getElementById( 'pane-' + t );
                 const active = t === tab;
@@ -542,6 +965,7 @@
             if ( tab === 'settings' ) { loadSettings(); loadNotificationSettings(); loadSecuritySection(); }
             if ( tab === 'logs'     ) { refreshLogs(); }
             if ( tab === 'printers' ) { prefillPrinterAddress(); }
+            if ( tab === 'labels'   ) { loadLabels(); loadSavedPrinters(); refreshRun(); }
         }
 
         // ── Status polling ────────────────────────────────────────────────
@@ -1066,6 +1490,1001 @@
         }
 
         // ── Restart ───────────────────────────────────────────────────────
+        // ── Blank labels ──────────────────────────────────────────────────
+        //
+        // The whole tab works with Rock unreachable, so nothing here reads the
+        // connection status or waits for it.
+
+        const BLANK_PREFS = 'rock-cp-blank-labels';
+
+        let blankLabels     = [];            // what is stored, from the API
+        let blankOrder      = [];            // names, in the order they print
+        let blankPicked     = new Set();     // which of them make up a copy
+        let blankSequential = {};            // where the numbering has reached
+        let blankRun        = null;
+        let blankPollTimer  = null;
+        let blankRestored   = false;
+
+        // The same group gets printed every few months, so re-ticking it and
+        // re-typing the printer every time is pointless friction.
+        function loadBlankPrefs() {
+            try { return JSON.parse( localStorage.getItem( BLANK_PREFS ) ) || {}; }
+            catch ( e ) { return {}; }
+        }
+
+        function saveBlankPrefs() {
+            try {
+                localStorage.setItem( BLANK_PREFS, JSON.stringify( {
+                    order:   blankOrder,
+                    picked:  [...blankPicked],
+                    address: document.getElementById( 'blank-address' ).value.trim(),
+                    cutter:  document.getElementById( 'blank-cutter' ).checked
+                } ) );
+            } catch ( e ) { /* private browsing, or a full quota. Not worth a message. */ }
+        }
+
+        // ── Saved printers ────────────────────────────────────────────────
+        // The list lives on the proxy, not in this browser. An address kept in
+        // local storage is remembered for one person on one machine, which
+        // left the next administrator who had to print blanks looking up an IP.
+        //
+        // There is one box. It takes a saved printer's name or a raw address,
+        // and the name is resolved to an address at the moment of printing. So
+        // whoever sets a printer up types its address once, and everybody
+        // after them types the name and never sees one.
+
+        let savedPrinters    = [];
+        let printerListIndex = -1;      // the row the arrow keys are on
+        let printerEditing   = null;    // the printer the dialog was opened on
+
+        async function loadSavedPrinters() {
+            let resp;
+            try { resp = await authFetch( '/api/printers' ); }
+            catch ( e ) { return; }
+
+            if ( !resp.ok ) return;
+
+            savedPrinters = await resp.json();
+
+            if ( isPrinterListOpen() ) renderPrinterList();
+        }
+
+        // A name that matches a saved printer wins, because that is what was
+        // typed. Anything else is an address and is used as one.
+        function resolvePrinter( text ) {
+            const value = ( text || '' ).trim().toLowerCase();
+
+            return savedPrinters.find( p => p.name.toLowerCase() === value ) || null;
+        }
+
+        // What a run is actually sent. Named here rather than read straight out
+        // of the box, because the box may be holding a name.
+        function printerAddressForRun() {
+            const value   = document.getElementById( 'blank-address' ).value.trim();
+            const printer = resolvePrinter( value );
+
+            return printer ? printer.address : value;
+        }
+
+        function isPrinterListOpen() {
+            return !document.getElementById( 'printer-list' ).classList.contains( 'hidden' );
+        }
+
+        function openPrinterList() {
+            printerListIndex = -1;
+            renderPrinterList();
+        }
+
+        function closePrinterList() {
+            document.getElementById( 'printer-list' ).classList.add( 'hidden' );
+            printerListIndex = -1;
+        }
+
+        function matchingPrinters() {
+            const value = document.getElementById( 'blank-address' ).value.trim().toLowerCase();
+
+            // An empty box, or one already holding a printer's name, shows the
+            // whole list - so a different printer can be chosen without having
+            // to clear the box first.
+            if ( !value || resolvePrinter( value ) ) return savedPrinters;
+
+            return savedPrinters.filter( p =>
+                p.name.toLowerCase().includes( value ) || p.address.toLowerCase().includes( value ) );
+        }
+
+        function renderPrinterList() {
+            const list = document.getElementById( 'printer-list' );
+            const rows = matchingPrinters();
+
+            list.replaceChildren();
+
+            // Nothing to offer is not a dropdown. Somebody who has never saved
+            // a printer sees a plain box and nothing else.
+            if ( !rows.length ) { list.classList.add( 'hidden' ); return; }
+
+            rows.forEach( ( printer, i ) => {
+                const row = document.createElement( 'div' );
+
+                row.className = 'flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer ' +
+                    ( i === printerListIndex ? 'bg-blue-50' : 'hover:bg-gray-50' );
+
+                // mousedown rather than click: the box loses focus first, and
+                // the blur that closes the list would land before a click did.
+                row.addEventListener( 'mousedown', event => {
+                    event.preventDefault();
+                    choosePrinter( printer.name );
+                } );
+
+                const name = document.createElement( 'span' );
+                name.className = 'flex-1 min-w-0 truncate text-gray-900';
+                name.textContent = printer.name;
+
+                const where = document.createElement( 'span' );
+                where.className = 'text-xs text-gray-400 whitespace-nowrap';
+                where.textContent = printer.address + ( printer.hasCutter ? ' · cutter' : '' );
+
+                const forget = document.createElement( 'button' );
+                forget.className = 'shrink-0 px-1 text-sm leading-none text-gray-300 hover:text-red-600';
+                forget.title = 'Forget this printer';
+                forget.innerHTML = '&times;';
+                forget.addEventListener( 'mousedown', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    forgetPrinter( printer.name );
+                } );
+
+                row.append( name, where, forget );
+                list.appendChild( row );
+            } );
+
+            list.classList.remove( 'hidden' );
+        }
+
+        function choosePrinter( name ) {
+            const printer = savedPrinters.find( p => p.name === name );
+
+            if ( !printer ) return;
+
+            document.getElementById( 'blank-address' ).value = printer.name;
+
+            // The cutter is a fact about the machine, so choosing one sets it.
+            // Still a checkbox, so it can be overridden for a single run.
+            document.getElementById( 'blank-cutter' ).checked = !!printer.hasCutter;
+
+            closePrinterList();
+            saveBlankPrefs();
+        }
+
+        function printerTyped() {
+            printerListIndex = -1;
+
+            renderPrinterList();
+            saveBlankPrefs();
+        }
+
+        function printerListKey( event ) {
+            if ( event.key === 'Escape' ) { closePrinterList(); return; }
+
+            const rows = matchingPrinters();
+
+            if ( event.key === 'ArrowDown' || event.key === 'ArrowUp' ) {
+                if ( !rows.length ) return;
+
+                event.preventDefault();
+
+                if ( !isPrinterListOpen() ) { openPrinterList(); return; }
+
+                printerListIndex = ( printerListIndex + ( event.key === 'ArrowDown' ? 1 : rows.length ) ) % rows.length;
+
+                renderPrinterList();
+
+                return;
+            }
+
+            if ( event.key === 'Enter' && isPrinterListOpen() && printerListIndex >= 0 ) {
+                event.preventDefault();
+
+                choosePrinter( rows[printerListIndex].name );
+            }
+        }
+
+        async function forgetPrinter( name ) {
+            const printer = savedPrinters.find( p => p.name === name );
+
+            if ( !printer ) return;
+
+            if ( !confirm( 'Stop offering "' + name + '" in the list?\n\n' +
+                           'The printer itself is untouched, and nothing already printed is affected.' ) ) return;
+
+            const box     = document.getElementById( 'blank-address' );
+            const showing = box.value.trim().toLowerCase() === name.toLowerCase();
+
+            if ( !await printerBookRequest( '/api/printers/' + encodeURIComponent( name ), { method: 'DELETE' },
+                    'Removed <strong>' + escHtml( name ) + '</strong>.' ) ) return;
+
+            // The box was holding a name that now means nothing to anyone. Put
+            // the address in its place rather than emptying it.
+            if ( showing ) {
+                box.value = printer.address;
+                saveBlankPrefs();
+            }
+
+            renderPrinterList();
+        }
+
+        async function printerBookRequest( url, options, okMessage ) {
+            let resp;
+
+            try { resp = await authFetch( url, options ); }
+            catch ( e ) { showBlankMessage( 'bad', 'The list of printers could not be changed.' ); return false; }
+
+            const data = await resp.json().catch( () => ( {} ) );
+
+            if ( !resp.ok ) {
+                showBlankMessage( 'bad', escHtml( data.error || 'The list of printers could not be changed.' ) );
+
+                return false;
+            }
+
+            await loadSavedPrinters();
+
+            showBlankMessage( 'ok', okMessage );
+
+            return true;
+        }
+
+        // The + button. Opens on whatever the box is holding: an address to be
+        // named, or a saved printer to be corrected.
+        function openPrinterDialog() {
+            const value = document.getElementById( 'blank-address' ).value.trim();
+
+            printerEditing = resolvePrinter( value );
+
+            document.getElementById( 'printer-modal-title' ).textContent =
+                printerEditing ? 'Edit this printer' : 'Save this printer';
+            document.getElementById( 'printer-modal-name' ).value = printerEditing ? printerEditing.name : '';
+            document.getElementById( 'printer-modal-address' ).value = printerEditing ? printerEditing.address : value;
+            document.getElementById( 'printer-modal-cutter' ).checked = printerEditing
+                ? !!printerEditing.hasCutter
+                : document.getElementById( 'blank-cutter' ).checked;
+
+            hideBoxMessage( 'printer-modal-message' );
+            closePrinterList();
+
+            document.getElementById( 'printer-modal' ).classList.remove( 'hidden' );
+            document.getElementById( printerEditing ? 'printer-modal-address' : 'printer-modal-name' ).focus();
+        }
+
+        function closePrinterDialog() {
+            document.getElementById( 'printer-modal' ).classList.add( 'hidden' );
+
+            hideBoxMessage( 'printer-modal-message' );
+
+            printerEditing = null;
+        }
+
+        function printerDialogKey( event ) {
+            if ( event.key === 'Enter' )  { event.preventDefault(); savePrinterDialog(); }
+            if ( event.key === 'Escape' ) { closePrinterDialog(); }
+        }
+
+        async function savePrinterDialog() {
+            const name      = document.getElementById( 'printer-modal-name' ).value.trim();
+            const address   = document.getElementById( 'printer-modal-address' ).value.trim();
+            const hasCutter = document.getElementById( 'printer-modal-cutter' ).checked;
+
+            if ( !name )    { showBoxMessage( 'printer-modal-message', 'bad', 'Give the printer a name.', '' ); return; }
+            if ( !address ) { showBoxMessage( 'printer-modal-message', 'bad', 'Enter the printer address.', '' ); return; }
+
+            const renamedFrom = printerEditing && printerEditing.name !== name ? printerEditing.name : null;
+
+            let resp;
+
+            try {
+                resp = await authFetch( '/api/printers', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { name: name, address: address, hasCutter: hasCutter } )
+                } );
+            } catch ( e ) {
+                showBoxMessage( 'printer-modal-message', 'bad', 'That could not be saved.', '' );
+
+                return;
+            }
+
+            const data = await resp.json().catch( () => ( {} ) );
+
+            if ( !resp.ok ) {
+                showBoxMessage( 'printer-modal-message', 'bad', escHtml( data.error || 'That could not be saved.' ), '' );
+
+                return;
+            }
+
+            // A rename is a save under the new name and then a tidy-up, so the
+            // old name does not linger in the list as a second printer.
+            if ( renamedFrom ) {
+                try { await authFetch( '/api/printers/' + encodeURIComponent( renamedFrom ), { method: 'DELETE' } ); }
+                catch ( e ) { /* The save worked. A leftover name is not worth failing over. */ }
+            }
+
+            await loadSavedPrinters();
+
+            // Showing the name is the entire point of having saved one.
+            document.getElementById( 'blank-address' ).value = name;
+            document.getElementById( 'blank-cutter' ).checked = hasCutter;
+
+            saveBlankPrefs();
+            closePrinterDialog();
+
+            showBlankMessage( 'ok', 'Saved <strong>' + escHtml( name ) + '</strong>.' );
+        }
+
+        function showLabelMessage( kind, html ) {
+            showBoxMessage( 'label-message', kind, html, 'mt-3' );
+        }
+
+        function showBlankMessage( kind, html ) {
+            showBoxMessage( 'blank-message', kind, html, '' );
+        }
+
+        // How long a success notice stays up before clearing itself.
+        const MESSAGE_LINGER_MS = 10000;
+
+        const messageTimers = {};
+
+        function showBoxMessage( id, kind, html, extra ) {
+            const el = document.getElementById( id );
+            const styles = {
+                ok:      'bg-green-50 border border-green-200 text-green-800',
+                bad:     'bg-red-50 border border-red-200 text-red-800',
+                waiting: 'bg-gray-50 border border-gray-200 text-gray-600',
+            };
+            el.className = ( extra + ' rounded-md p-3 text-sm ' + styles[kind] ).trim();
+
+            // Every notice can be dismissed. Being stuck with one you have read
+            // and dealt with is a small thing that is irritating every time.
+            el.innerHTML =
+                '<div class="flex items-start justify-between gap-3">' +
+                    '<div class="min-w-0">' + html + '</div>' +
+                    '<button onclick="hideBoxMessage(\'' + id + '\')" title="Dismiss" ' +
+                        'class="shrink-0 leading-none opacity-50 hover:opacity-100">&times;</button>' +
+                '</div>';
+            el.classList.remove( 'hidden' );
+
+            if ( messageTimers[id] ) clearTimeout( messageTimers[id] );
+            delete messageTimers[id];
+
+            // A success is an acknowledgement rather than something to act on,
+            // so it goes away on its own. A failure stays until it is dismissed
+            // or replaced, because it is the only record of what went wrong.
+            if ( kind === 'ok' ) {
+                messageTimers[id] = setTimeout( () => hideBoxMessage( id ), MESSAGE_LINGER_MS );
+            }
+        }
+
+        function hideBoxMessage( id ) {
+            document.getElementById( id ).classList.add( 'hidden' );
+
+            if ( messageTimers[id] ) clearTimeout( messageTimers[id] );
+            delete messageTimers[id];
+        }
+
+        function hideBlankMessage() {
+            hideBoxMessage( 'blank-message' );
+        }
+
+        async function loadLabels() {
+            let resp;
+            try { resp = await authFetch( '/api/labels' ); }
+            catch ( e ) { return; }
+
+            if ( !resp.ok ) { showLabelMessage( 'bad', 'Could not read the stored labels.' ); return; }
+
+            blankLabels = await resp.json();
+
+            if ( !blankRestored ) {
+                const prefs = loadBlankPrefs();
+                blankOrder  = Array.isArray( prefs.order ) ? prefs.order.slice() : [];
+                blankPicked = new Set( Array.isArray( prefs.picked ) ? prefs.picked : [] );
+                const address = document.getElementById( 'blank-address' );
+                if ( prefs.address && !address.value ) address.value = prefs.address;
+                document.getElementById( 'blank-cutter' ).checked = !!prefs.cutter;
+                blankRestored = true;
+            }
+
+            // Keep the remembered order for labels that still exist, put anything
+            // new at the end, and forget anything that has been deleted.
+            const names = blankLabels.map( l => l.name );
+            blankOrder  = blankOrder.filter( n => names.includes( n ) );
+            names.forEach( n => { if ( !blankOrder.includes( n ) ) blankOrder.push( n ); } );
+            [...blankPicked].forEach( n => { if ( !names.includes( n ) ) blankPicked.delete( n ); } );
+
+            renderLabelList();
+            updateBlankTotals();
+        }
+
+        // Size is baked into the template and cannot be changed from here, so
+        // this is a note about which stock to load rather than a setting.
+        function describeSize( label ) {
+            if ( !label.widthDots || !label.lengthDots ) {
+                return { text: label.bytes + ' B',
+                         tip:  'This template does not say what size it is.' };
+            }
+            const w = ( label.widthDots  / 203 ).toFixed( 1 );
+            const h = ( label.lengthDots / 203 ).toFixed( 1 );
+            return {
+                text: w + ' \u00d7 ' + h + ' in',
+                tip:  'The size is fixed in the template (^PW' + label.widthDots +
+                      ' ^LL' + label.lengthDots + '), at 203 dpi. Load the stock that matches. ' +
+                      label.bytes + ' bytes.'
+            };
+        }
+
+        function renderLabelList() {
+            const host = document.getElementById( 'label-list' );
+
+            if ( !blankOrder.length ) {
+                host.innerHTML = '<p class="py-3 text-xs text-gray-500">' +
+                    'Nothing stored. Upload a ZPL file with <code class="bg-gray-100 px-1 rounded">WWW</code> ' +
+                    'where the security code should go.</p>';
+                return;
+            }
+
+            const byName = {};
+            blankLabels.forEach( l => { byName[l.name] = l; } );
+
+            const icon = 'px-1 text-gray-300 hover:text-gray-600 disabled:opacity-40 ' +
+                         'disabled:hover:text-gray-300 text-xs leading-none';
+
+            host.innerHTML = blankOrder.map( ( name, i ) => {
+                const size = describeSize( byName[name] || { bytes: 0 } );
+                return '<div class="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">' +
+                    '<input type="checkbox" ' + ( blankPicked.has( name ) ? 'checked ' : '' ) +
+                        'onchange="toggleLabel(' + i + ')" ' +
+                        'class="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">' +
+                    '<span class="flex-1 min-w-0 truncate text-sm text-gray-900">' + escHtml( name ) + '</span>' +
+                    '<span class="text-xs text-gray-400 tabular-nums whitespace-nowrap" title="' +
+                        escHtml( size.tip ) + '">' + escHtml( size.text ) + '</span>' +
+                    '<button onclick="moveLabel(' + i + ',-1)" class="' + icon + '" ' +
+                        ( i === 0 ? 'disabled ' : '' ) + 'title="Print earlier">&#9650;</button>' +
+                    '<button onclick="moveLabel(' + i + ',1)" class="' + icon + '" ' +
+                        ( i === blankOrder.length - 1 ? 'disabled ' : '' ) + 'title="Print later">&#9660;</button>' +
+                    '<button onclick="deleteLabel(' + i + ')" title="Delete" ' +
+                        'class="px-1 text-sm leading-none text-gray-300 hover:text-red-600">&times;</button>' +
+                '</div>';
+            } ).join( '' );
+        }
+
+        // ── Capturing a label from Rock ───────────────────────────────────
+
+        // Matches LabelCapture.DefaultPort. The raw printing port, so a Rock
+        // device address with no port on it reaches capture unchanged.
+        const LabelCaptureDefaultPort = 9100;
+
+        let capturePollTimer = null;
+
+        function toggleCapture() {
+            const panel = document.getElementById( 'capture-panel' );
+            panel.classList.toggle( 'hidden' );
+
+            if ( !panel.classList.contains( 'hidden' ) ) {
+                updateCaptureAddress();
+                refreshCapture();
+            } else {
+                stopCapturePolling();
+            }
+        }
+
+        // The address is from the point of view of whichever proxy opens the
+        // connection, which is not necessarily this one. The ordinary case is a
+        // production proxy elsewhere sending here as if this were a printer, so
+        // the address it needs is this machine's - the one the browser reached
+        // it on is the best available guess at that. Loopback is offered
+        // alongside for when this proxy is itself the one Rock routes to.
+        function updateCaptureAddress() {
+            const port = document.getElementById( 'capture-port' ).value || '9100';
+            document.getElementById( 'capture-address' ).textContent = location.hostname + ':' + port;
+            document.getElementById( 'capture-loopback-note' ).innerHTML =
+                'If this proxy is itself the one Rock sends the label to, use ' +
+                '<code class="bg-white px-1 rounded border border-gray-200">127.0.0.1:' + port + '</code> ' +
+                'instead — it connects to itself, so nothing crosses a network at all.';
+        }
+
+        function showCaptureMessage( kind, html ) {
+            showBoxMessage( 'capture-message', kind, html, '' );
+        }
+
+        function hideCaptureMessage() {
+            hideBoxMessage( 'capture-message' );
+        }
+
+        async function armCapture() {
+            hideCaptureMessage();
+
+            const port = parseInt( document.getElementById( 'capture-port' ).value, 10 ) || LabelCaptureDefaultPort;
+
+            try {
+                const resp = await authFetch( '/api/labels/capture/arm', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { port } )
+                } );
+                const data = await resp.json();
+
+                if ( !resp.ok ) { showCaptureMessage( 'bad', escHtml( data.error || 'Could not start waiting.' ) ); return; }
+
+                updateCaptureAddress();
+                renderCapture( data );
+                startCapturePolling();
+            } catch ( e ) { /* handled */ }
+        }
+
+        async function disarmCapture() { await captureAction( '/api/labels/capture/disarm' ); }
+        async function discardCapture() { await captureAction( '/api/labels/capture/discard' ); }
+
+        async function captureAction( url ) {
+            hideCaptureMessage();
+            try {
+                const resp = await authFetch( url, { method: 'POST' } );
+                renderCapture( await resp.json() );
+            } catch ( e ) { /* handled */ }
+        }
+
+        async function refreshCapture() {
+            try {
+                const resp = await authFetch( '/api/labels/capture' );
+                if ( resp.ok ) renderCapture( await resp.json() );
+            } catch ( e ) { stopCapturePolling(); }
+        }
+
+        function startCapturePolling() {
+            if ( capturePollTimer ) return;
+            capturePollTimer = setInterval( refreshCapture, 1000 );
+        }
+
+        function stopCapturePolling() {
+            if ( !capturePollTimer ) return;
+            clearInterval( capturePollTimer );
+            capturePollTimer = null;
+        }
+
+        function renderCapture( data ) {
+            const waiting  = data.state === 'waiting';
+            const captured = data.state === 'captured';
+
+            document.getElementById( 'capture-arm-btn'  ).classList.toggle( 'hidden', waiting );
+            document.getElementById( 'capture-stop-btn' ).classList.toggle( 'hidden', !waiting );
+            document.getElementById( 'capture-result'   ).classList.toggle( 'hidden', !captured );
+
+            const state = document.getElementById( 'capture-state' );
+            if ( waiting )       state.textContent = 'waiting on port ' + data.port + '\u2026';
+            else if ( captured ) state.textContent = data.bytes + ' bytes from ' + ( data.from || 'the proxy' );
+            else                 state.textContent = '';
+
+            if ( data.error ) showCaptureMessage( 'bad', escHtml( data.error ) );
+
+            if ( !captured ) { if ( !waiting ) stopCapturePolling(); return; }
+
+            stopCapturePolling();
+
+            // Every field, in order. More than one can be the code - a receipt
+            // torn in half carries it on both halves - so these are tick boxes
+            // rather than a single choice.
+            //
+            // On a label Rock rendered without an attendance behind it the code
+            // fields are EMPTY, so there is often no text to recognise. The
+            // font height is what gives it away: the code is the one thing on a
+            // check-in label printed large.
+            const tallest = data.fields.reduce( ( m, f ) => Math.max( m, f.fontHeight || 0 ), 0 );
+
+            document.getElementById( 'capture-fields' ).innerHTML = data.fields.length
+                ? data.fields.map( f => {
+                    const big = tallest > 0 && f.fontHeight === tallest;
+                    const shown = f.text
+                        ? '<code class="bg-white px-1 rounded border border-gray-200">' + escHtml( f.text ) + '</code>'
+                        : '<span class="italic text-gray-400">empty</span>';
+                    const size = f.fontHeight
+                        ? '<span class="text-gray-400 tabular-nums">' + f.fontHeight + ' dots tall</span>'
+                        : '';
+                    return '<label class="flex items-center gap-2 cursor-pointer">' +
+                        '<input type="checkbox" name="capture-field" value="' + f.index + '"' +
+                            ( big ? ' checked' : '' ) +
+                            ' class="h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500">' +
+                        '<span class="text-gray-400 tabular-nums w-4">' + ( f.index + 1 ) + '.</span>' +
+                        shown + size +
+                    '</label>';
+                } ).join( '' )
+                : '<p class="text-red-700">No printable fields were found in that label.</p>';
+
+            // The largest fields start ticked, which on a real check-in label is
+            // the right answer. It is a starting point, not a decision - only
+            // whoever designed the label knows for certain.
+            document.getElementById( 'capture-hint' ).textContent = tallest > 0
+                ? 'The largest fields are ticked to start with, since the code is normally the biggest thing on the label. Change it if that is wrong.'
+                : '';
+        }
+
+        async function saveCapture() {
+            hideCaptureMessage();
+
+            const fields = [...document.querySelectorAll( 'input[name="capture-field"]:checked' )]
+                .map( box => parseInt( box.value, 10 ) );
+            const name   = document.getElementById( 'capture-name' ).value.trim();
+
+            if ( !fields.length ) { showCaptureMessage( 'bad', 'Tick which fields hold the security code.' ); return; }
+            if ( !name )          { showCaptureMessage( 'bad', 'Give the label a name.' ); return; }
+
+            try {
+                const resp = await authFetch( '/api/labels/capture/save', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { name, fields } )
+                } );
+                const data = await resp.json();
+
+                if ( !resp.ok ) { showCaptureMessage( 'bad', escHtml( data.error || 'That label was not saved.' ) ); return; }
+
+                showCaptureMessage( 'ok', 'Saved <strong>' + escHtml( data.name ) + '</strong>.' );
+                document.getElementById( 'capture-name' ).value = '';
+                await refreshCapture();
+                await loadLabels();
+            } catch ( e ) { /* handled */ }
+        }
+
+        function toggleLabelHelp() {
+            document.getElementById( 'label-help' ).classList.toggle( 'hidden' );
+        }
+
+        function toggleLabel( index ) {
+            const name = blankOrder[index];
+            if ( blankPicked.has( name ) ) blankPicked.delete( name ); else blankPicked.add( name );
+            saveBlankPrefs();
+            updateBlankTotals();
+        }
+
+        function moveLabel( index, delta ) {
+            const target = index + delta;
+            if ( target < 0 || target >= blankOrder.length ) return;
+            const [moved] = blankOrder.splice( index, 1 );
+            blankOrder.splice( target, 0, moved );
+            saveBlankPrefs();
+            renderLabelList();
+        }
+
+        // Copies, never labels. Somebody asking for 500 wants 500 usable sets,
+        // and the label count is shown next to it only so they know how much
+        // stock to have to hand.
+        function updateBlankTotals() {
+            const copies = parseInt( document.getElementById( 'blank-quantity' ).value, 10 ) || 0;
+            const picked = blankPicked.size;
+            const el     = document.getElementById( 'blank-totals' );
+
+            if ( !copies || !picked ) { el.textContent = 'Copies of the ticked labels, not a label count.'; return; }
+
+            el.textContent = copies.toLocaleString() + ( copies === 1 ? ' copy · ' : ' copies · ' ) +
+                             ( copies * picked ).toLocaleString() + ' labels';
+        }
+
+        function updateBlankMode() {
+            const sequential = document.getElementById( 'blank-mode' ).value === 'sequential';
+            document.getElementById( 'blank-start-field'  ).classList.toggle( 'hidden', !sequential );
+            document.getElementById( 'blank-length-field' ).classList.toggle( 'hidden', sequential );
+            renderSequentialNote();
+        }
+
+        async function uploadLabel( event ) {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if ( !file ) return;
+
+            const name = file.name.replace( /\.(zpl|prn|txt)$/i, '' );
+            const buffer = new Uint8Array( await file.arrayBuffer() );
+
+            // Base64 by hand rather than FileReader, so the bytes go across
+            // untouched - a template can legitimately contain bytes that are
+            // not valid text.
+            let binary = '';
+            buffer.forEach( b => { binary += String.fromCharCode( b ); } );
+
+            try {
+                const resp = await authFetch( '/api/labels', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( { name, contentBase64: btoa( binary ) } )
+                } );
+                const data = await resp.json();
+
+                if ( !resp.ok ) { showLabelMessage( 'bad', escHtml( data.error || 'That label was not stored.' ) ); return; }
+
+                showLabelMessage( 'ok', 'Stored <strong>' + escHtml( data.name ) + '</strong>.' );
+                await loadLabels();
+            } catch ( e ) { /* authFetch already handled a 401 */ }
+        }
+
+        async function deleteLabel( index ) {
+            const name = blankOrder[index];
+            if ( !confirm( 'Delete "' + name + '"?\n\nThe three demo labels can be downloaded again from the project page; anything else you uploaded cannot.' ) ) return;
+
+            try {
+                const resp = await authFetch( '/api/labels/' + encodeURIComponent( name ), { method: 'DELETE' } );
+                if ( !resp.ok ) {
+                    const data = await resp.json();
+                    showLabelMessage( 'bad', escHtml( data.error || 'That label was not deleted.' ) );
+                    return;
+                }
+                showLabelMessage( 'ok', 'Deleted <strong>' + escHtml( name ) + '</strong>.' );
+                await loadLabels();
+            } catch ( e ) { /* handled */ }
+        }
+
+        function firstPickedLabel() {
+            for ( const name of blankOrder ) if ( blankPicked.has( name ) ) return name;
+            return null;
+        }
+
+        async function previewLabel() {
+            const names = blankOrder.filter( n => blankPicked.has( n ) );
+
+            if ( !names.length ) { showBlankMessage( 'bad', 'Tick at least one label to preview.' ); return; }
+
+            hideBlankMessage();
+            openPreview( '<p class="text-sm text-gray-500">Drawing\u2026</p>', '' );
+
+            const mode  = document.getElementById( 'blank-mode' ).value;
+            const start = document.getElementById( 'blank-start' ).value.trim();
+            const body  = {
+                names, mode,
+                codeLength: parseInt( document.getElementById( 'blank-length' ).value, 10 ) || 3,
+                prefix:     document.getElementById( 'blank-prefix' ).value.trim()
+            };
+            if ( start ) body.start = start;
+
+            let resp, data;
+            try {
+                resp = await authFetch( '/api/labels/preview', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( body )
+                } );
+                data = await resp.json();
+            } catch ( e ) { closePreview(); return; }
+
+            if ( resp.status === 429 ) {
+                openPreview( '<p class="text-sm text-red-700">Too many previews at once. Try again in a second.</p>', '' );
+                return;
+            }
+            if ( !resp.ok ) {
+                openPreview( '<p class="text-sm text-red-700">' +
+                    escHtml( data.error || 'Those labels could not be drawn.' ) + '</p>', '' );
+                return;
+            }
+
+            // One code across all of them, because that is what a copy is - the
+            // child's tag and the parent's receipt carry the same one.
+            const subtitle = names.length === 1
+                ? 'Code ' + data.code
+                : names.length + ' labels, all carrying the code ' + data.code + ' \u2014 that is one copy';
+
+            openPreview( data.labels.map( l =>
+                '<figure>' +
+                    '<img alt="' + escHtml( l.name ) + '" class="max-w-full border border-gray-300 bg-white" ' +
+                         'src="data:image/png;base64,' + l.png + '">' +
+                    '<figcaption class="mt-1 text-xs text-gray-500">' + escHtml( l.name ) + ' \u00b7 ' +
+                        ( l.widthDots / data.dpi ).toFixed( 1 ) + ' \u00d7 ' +
+                        ( l.lengthDots / data.dpi ).toFixed( 1 ) + ' in at ' + data.dpi + ' dpi' +
+                    '</figcaption>' +
+                '</figure>' ).join( '' ), subtitle );
+        }
+
+        function openPreview( html, subtitle ) {
+            document.getElementById( 'preview-body' ).innerHTML = html;
+            document.getElementById( 'preview-subtitle' ).textContent = subtitle;
+            document.getElementById( 'preview-modal' ).classList.remove( 'hidden' );
+            document.addEventListener( 'keydown', previewKeyHandler );
+        }
+
+        function closePreview() {
+            document.getElementById( 'preview-modal' ).classList.add( 'hidden' );
+            document.getElementById( 'preview-body' ).innerHTML = '';
+            document.removeEventListener( 'keydown', previewKeyHandler );
+        }
+
+        function previewKeyHandler( event ) {
+            if ( event.key === 'Escape' ) closePreview();
+        }
+
+        async function startBlankRun( isTest ) {
+            // The box may be holding a saved printer's name rather than an
+            // address, so it is resolved here. Everything past this point deals
+            // in addresses, exactly as it did before names existed.
+            const address = printerAddressForRun();
+            const labels  = blankOrder.filter( n => blankPicked.has( n ) );
+            const mode    = document.getElementById( 'blank-mode' ).value;
+            const start   = document.getElementById( 'blank-start' ).value.trim();
+
+            if ( !address ) { showBlankMessage( 'bad', 'Enter the printer address.' ); return; }
+            if ( !labels.length ) { showBlankMessage( 'bad', 'Tick at least one label.' ); return; }
+
+            // Advisory only - there is no limit on the server, and a thousand
+            // sets has been printed in practice. This is here to catch the
+            // stray extra zero, so it sits above anything anyone has asked for.
+            const copies = parseInt( document.getElementById( 'blank-quantity' ).value, 10 ) || 0;
+            if ( !isTest && copies > 1000 ) {
+                if ( !confirm( copies.toLocaleString() + ' copies is ' +
+                               ( copies * labels.length ).toLocaleString() +
+                               ' labels. Make sure there is enough stock on the roll — the printer will pause ' +
+                               'and carry on when it is reloaded, but it is a long wait.\n\nPrint them?' ) ) return;
+            }
+
+            // Starting below what has already gone out would put the same code
+            // on two different stacks. Worth stopping to think about, but it is
+            // still their call - there are good reasons to reprint.
+            if ( mode === 'sequential' && !isTest ) {
+                const from = start || blankSequential.sequentialNext || '';
+                const used = blankSequential.sequentialReservedThrough;
+                if ( from && used && Number( from ) <= Number( used ) ) {
+                    const last = ( blankSequential.history || [] )[0];
+                    const when = last ? '\n\nThe run on ' + fmtDate( last.startedAt ) + ' used ' +
+                                        last.firstCode + ' to ' + last.lastCode + '.' : '';
+                    if ( !confirm( 'Codes up to ' + used + ' have already been printed.' + when +
+                                   '\n\nStarting at ' + from + ' puts the same codes on a second stack. Print anyway?' ) ) return;
+                }
+            }
+
+            saveBlankPrefs();
+            hideBlankMessage();
+
+            const body = {
+                address, labels, mode,
+                quantity:   parseInt( document.getElementById( 'blank-quantity' ).value, 10 ) || 0,
+                codeLength: parseInt( document.getElementById( 'blank-length' ).value, 10 ) || 3,
+                prefix:     document.getElementById( 'blank-prefix' ).value.trim(),
+                hasCutter:  document.getElementById( 'blank-cutter' ).checked,
+                test:       !!isTest
+            };
+            if ( start ) body.start = start;
+
+            try {
+                const resp = await authFetch( '/api/labels/print', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify( body )
+                } );
+                const data = await resp.json();
+
+                if ( resp.status === 429 ) { showBlankMessage( 'bad', 'Too many runs started at once. Wait a moment.' ); return; }
+                if ( resp.status === 409 ) { showBlankMessage( 'bad', 'A run is already going. Wait for it to finish, or cancel it.' ); refreshRun(); return; }
+                if ( !resp.ok ) { showBlankMessage( 'bad', escHtml( data.error || 'That run could not be started.' ) ); return; }
+
+                blankRun = data;
+                renderRun();
+                startRunPolling();
+            } catch ( e ) { /* handled */ }
+        }
+
+        async function cancelBlankRun() {
+            if ( !blankRun ) return;
+            try { await authFetch( '/api/labels/print/' + encodeURIComponent( blankRun.id ) + '/cancel', { method: 'POST' } ); }
+            catch ( e ) { return; }
+            refreshRun();
+        }
+
+        function startRunPolling() {
+            if ( blankPollTimer ) return;
+            blankPollTimer = setInterval( refreshRun, 1000 );
+        }
+
+        function stopRunPolling() {
+            if ( !blankPollTimer ) return;
+            clearInterval( blankPollTimer );
+            blankPollTimer = null;
+        }
+
+        async function refreshRun() {
+            let resp;
+            try { resp = await authFetch( '/api/labels/print' ); }
+            catch ( e ) { stopRunPolling(); return; }
+            if ( !resp.ok ) return;
+
+            const data = await resp.json();
+            blankSequential = data;
+            blankRun        = data.run;
+
+            renderRun();
+            renderSequentialNote();
+            renderHistory();
+
+            if ( blankRun && blankRun.status === 'running' ) startRunPolling(); else stopRunPolling();
+        }
+
+        function renderSequentialNote() {
+            const note = document.getElementById( 'blank-sequential-note' );
+            const box  = document.getElementById( 'blank-start' );
+            const sequential = document.getElementById( 'blank-mode' ).value === 'sequential';
+
+            note.classList.toggle( 'hidden', !sequential );
+
+            if ( blankSequential.sequentialStateUnreadable ) {
+                note.textContent = 'The record of used codes could not be read, so this needs a starting number. Check the last labels you printed.';
+                note.className   = ( sequential ? '' : 'hidden ' ) + 'text-xs text-red-600';
+                box.placeholder  = 'required';
+                return;
+            }
+
+            note.className = ( sequential ? '' : 'hidden ' ) + 'text-xs text-gray-500';
+
+            if ( blankSequential.sequentialNext ) {
+                box.placeholder  = blankSequential.sequentialNext;
+                note.textContent = 'Leave blank to carry on from ' + blankSequential.sequentialNext +
+                                   '. Codes up to ' + blankSequential.sequentialReservedThrough + ' have already gone out.';
+            } else {
+                note.textContent = 'No sequential run yet, so choose where to start.';
+            }
+        }
+
+        function renderRun() {
+            const card = document.getElementById( 'blank-run' );
+
+            if ( !blankRun ) { card.classList.add( 'hidden' ); return; }
+
+            const running = blankRun.status === 'running';
+            const done    = blankRun.copiesHandedToPrinter;
+            const total   = blankRun.quantity;
+
+            document.getElementById( 'blank-run-title' ).textContent = {
+                running:   'Printing',
+                completed: 'Finished',
+                cancelled: 'Cancelled',
+                failed:    'Stopped'
+            }[blankRun.status] || blankRun.status;
+
+            // "Handed to the printer", never "printed". A completed write only
+            // means the operating system took the bytes - the printer may still
+            // be working through them, or may have jammed.
+            let detail = done.toLocaleString() + ' of ' + total.toLocaleString() +
+                         ( total === 1 ? ' copy' : ' copies' ) + ' handed to the printer';
+            if ( blankRun.labelsPerCopy > 1 ) detail += ' · ' + ( done * blankRun.labelsPerCopy ).toLocaleString() + ' labels';
+            if ( blankRun.error ) detail += ' · ' + blankRun.error;
+
+            document.getElementById( 'blank-run-detail' ).textContent = detail;
+
+            let codes = 'Codes ' + blankRun.firstCode + ' to ' + blankRun.lastCode;
+            if ( blankRun.mode === 'sequential' ) {
+                codes += ' were reserved and will not be reused';
+                if ( blankSequential.sequentialNext ) codes += ' · the next run starts at ' + blankSequential.sequentialNext;
+            }
+            document.getElementById( 'blank-run-codes' ).textContent = codes;
+
+            document.getElementById( 'blank-run-bar' ).style.width =
+                ( total ? Math.round( 100 * done / total ) : 0 ) + '%';
+            document.getElementById( 'blank-cancel-btn' ).classList.toggle( 'hidden', !running );
+
+            card.classList.remove( 'hidden' );
+        }
+
+        function renderHistory() {
+            const card = document.getElementById( 'blank-history-card' );
+            const host = document.getElementById( 'blank-history' );
+            const runs = blankSequential.history || [];
+
+            if ( !runs.length ) { card.classList.add( 'hidden' ); return; }
+
+            host.innerHTML = runs.map( r => {
+                const colour = r.status === 'completed' ? 'text-green-700'
+                             : r.status === 'failed'    ? 'text-red-700' : 'text-gray-500';
+                return '<div class="flex items-baseline justify-between gap-3 py-1.5 border-b border-gray-100 last:border-0">' +
+                    '<span class="text-xs text-gray-500 tabular-nums whitespace-nowrap">' + escHtml( fmtDate( r.startedAt ) ) + '</span>' +
+                    '<span class="flex-1 text-sm text-gray-700 truncate">' +
+                        escHtml( r.firstCode + '–' + r.lastCode ) + ' · ' +
+                        escHtml( r.labels.join( ', ' ) ) + '</span>' +
+                    '<span class="text-xs tabular-nums whitespace-nowrap ' + colour + '">' +
+                        r.copiesHandedToPrinter + '/' + r.quantity + ' ' + escHtml( r.status ) + '</span>' +
+                '</div>';
+            } ).join( '' );
+
+            card.classList.remove( 'hidden' );
+        }
+
         async function restartService() {
             const note = authRequired
                 ? '\n\nYou will need to log in again after the restart.'

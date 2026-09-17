@@ -18,3 +18,112 @@
         font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
     }
 }
+
+/* ── Dark theme ──────────────────────────────────────────────────────────
+   The page is built from Tailwind colour utilities, and there are ~370 of
+   them across the markup - plus more built as strings inside the script,
+   where a `dark:` variant cannot be written at all. Rather than doubling
+   every one of those, the palette is redefined once, here, under .dark on
+   the root element.
+
+   Each rule wins on specificity (.dark .bg-white is 0,2,0 against 0,1,0),
+   so order and Tailwind's layers do not come into it. The trade is worth
+   naming: an element added later gets the dark theme for free, which is
+   the opposite of the usual failure where somebody forgets a dark:
+   variant and ships a white card into a dark page.
+
+   The log view is deliberately absent. It is already dark in both themes,
+   and its colours (bg-gray-900, border-gray-700, text-gray-100,
+   text-red-400, text-yellow-400) are left exactly as they are. So are the
+   blue of a primary button, and the two overlays, which were dark to
+   begin with. */
+
+.dark {
+    /* Makes the browser draw its own furniture - scrollbars, the caret,
+       checkboxes, date pickers - to match. Without it the form controls
+       stay light and look pasted on. */
+    color-scheme: dark;
+}
+
+/* Surfaces, from the page behind everything to the things sitting on it. */
+.dark .bg-gray-50            { background-color: #0f172a; }
+.dark .bg-white              { background-color: #1e293b; }
+.dark .bg-gray-100           { background-color: #334155; }
+.dark .bg-gray-300           { background-color: #475569; }
+.dark .hover\:bg-gray-50:hover  { background-color: #334155; }
+.dark .hover\:bg-gray-100:hover { background-color: #334155; }
+
+/* Borders. */
+.dark .border-gray-100       { border-color: #334155; }
+.dark .border-gray-200       { border-color: #334155; }
+.dark .border-gray-300       { border-color: #475569; }
+.dark .hover\:border-gray-200:hover { border-color: #475569; }
+.dark .hover\:border-gray-500:hover { border-color: #64748b; }
+
+/* Text, darkest to lightest in the light theme, inverted here. */
+.dark .text-gray-900         { color: #f1f5f9; }
+.dark .text-gray-800         { color: #e2e8f0; }
+.dark .text-gray-700         { color: #cbd5e1; }
+.dark .text-gray-600         { color: #94a3b8; }
+.dark .text-gray-500         { color: #94a3b8; }
+.dark .text-gray-400         { color: #64748b; }
+.dark .text-gray-300         { color: #475569; }
+.dark .hover\:text-gray-700:hover { color: #e2e8f0; }
+.dark .hover\:text-gray-600:hover { color: #cbd5e1; }
+
+/* A failure, and anything that needs to read as one. */
+.dark .bg-red-50             { background-color: #450a0a; }
+.dark .border-red-200        { border-color: #7f1d1d; }
+.dark .text-red-800          { color: #fca5a5; }
+.dark .text-red-700          { color: #fca5a5; }
+.dark .text-red-600          { color: #f87171; }
+.dark .hover\:bg-red-50:hover      { background-color: #450a0a; }
+.dark .hover\:border-red-200:hover { border-color: #7f1d1d; }
+.dark .hover\:text-red-600:hover   { color: #f87171; }
+
+/* A success. */
+.dark .bg-green-50           { background-color: #052e16; }
+.dark .border-green-200      { border-color: #14532d; }
+.dark .text-green-800        { color: #86efac; }
+.dark .text-green-700        { color: #86efac; }
+
+/* A warning, in both the shades the page uses for one. */
+.dark .bg-amber-50           { background-color: #451a03; }
+.dark .border-amber-200      { border-color: #78350f; }
+.dark .text-amber-900        { color: #fcd34d; }
+.dark .text-amber-800        { color: #fcd34d; }
+.dark .bg-yellow-50          { background-color: #422006; }
+.dark .bg-yellow-100         { background-color: #422006; }
+.dark .border-yellow-200     { border-color: #713f12; }
+.dark .text-yellow-800       { color: #fde047; }
+.dark .text-yellow-700       { color: #fde047; }
+.dark .text-yellow-600       { color: #fde047; }
+
+/* Blue, where it is information rather than a button. */
+.dark .bg-blue-50            { background-color: #172554; }
+.dark .border-blue-200       { border-color: #1e3a8a; }
+.dark .text-blue-800         { color: #93c5fd; }
+.dark .text-blue-600         { color: #60a5fa; }
+.dark .text-blue-500         { color: #60a5fa; }
+.dark .hover\:text-blue-700:hover { color: #93c5fd; }
+
+/* Form controls carry no background class of their own, so without this
+   they would stay white on a dark card. Checkboxes are left out - they
+   are drawn by the browser, and color-scheme above already handles them. */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+    color: #64748b;
+}
+
+/* A label preview is a picture of something printed on white stock, so it
+   is shown on white whatever the page is doing. */
+.dark #preview-body img {
+    background-color: #ffffff;
+}

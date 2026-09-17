@@ -1,0 +1,7 @@
+# Label templates are byte-exact by definition. They carry CRLF line endings
+# because that is what a Zebra printer is given, and the proxy seeds them into
+# config/labels/ and checks them against a known checksum. Letting git rewrite
+# the line endings on checkout would change those bytes on Windows and break
+# both the checksum and, potentially, the print.
+*.zpl -text
+*.prn -text

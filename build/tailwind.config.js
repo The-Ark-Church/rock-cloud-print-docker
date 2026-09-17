@@ -8,6 +8,7 @@
  * app.css, so the page ships everything it needs.
  */
 module.exports = {
+  darkMode: 'class',
   content: ["./Rock.CloudPrint.Service/wwwroot/index.html"],
   theme: { extend: {} },
   plugins: []
