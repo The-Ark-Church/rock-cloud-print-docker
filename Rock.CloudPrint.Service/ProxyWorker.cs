@@ -43,6 +43,13 @@ class ProxyWorker : BackgroundService
     private readonly ILogger<ProxyWorker> _logger;
 
     /// <summary>
+    /// The logger handed to the proxy instances. It is separate from
+    /// <see cref="_logger"/> so their messages are attributed to
+    /// <see cref="ProxyClientWebSocket"/> rather than to this worker.
+    /// </summary>
+    private readonly ILogger<ProxyClientWebSocket> _proxyLogger;
+
+    /// <summary>
     /// Monitors for changes to the proxy options.
     /// </summary>
     private readonly IOptionsMonitor<CloudPrintOptions> _optionsMonitor;
@@ -101,6 +108,7 @@ class ProxyWorker : BackgroundService
     {
         _serviceProvider = serviceProvider;
         _logger = serviceProvider.GetRequiredService<ILogger<ProxyWorker>>();
+        _proxyLogger = serviceProvider.GetRequiredService<ILogger<ProxyClientWebSocket>>();
         _optionsMonitor = serviceProvider.GetRequiredService<IOptionsMonitor<CloudPrintOptions>>();
         _status = serviceProvider.GetRequiredService<ProxyStatus>();
         _metrics = serviceProvider.GetRequiredService<PrintMetrics>();
@@ -152,7 +160,7 @@ class ProxyWorker : BackgroundService
 
         var ws = await ConnectAsync( cancellationToken );
         var options = _optionsMonitor.CurrentValue;
-        var proxy = new ProxyClientWebSocket( ws, _logger, _status, _metrics, options.SlowPrintMilliseconds, _notifier );
+        var proxy = new ProxyClientWebSocket( ws, _proxyLogger, _status, _metrics, options.SlowPrintMilliseconds, _notifier );
 
         _socket = ws;
         _stopRequested = false;
