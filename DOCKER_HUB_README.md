@@ -226,6 +226,10 @@ Settings are stored in the `config/` directory outside the container and are una
 | Settings → Notifications | Tell Rock when a printer fails. Needs Rock-side setup first — see below |
 | Settings → Security | Set, change, or remove web UI PIN |
 
+The running version is shown beside the title, next to a button that switches
+between the light and dark themes. The page follows your browser's own
+light/dark setting until you press it, then remembers what you chose.
+
 ---
 
 ## Blank labels
@@ -274,6 +278,14 @@ proxy sends the cut commands itself — one cut after the last label of each cop
 It uses the same commands Rock sends during check-in, so the cut no longer
 depends on which uploaded label happens to carry `^MMC`.
 
+**Printers can be saved by name.** The Printer box takes an address or the name
+of a saved printer, and the list under it narrows as you type. Press **+** to
+save what is in the box — the dialog asks for a name, the address, and whether
+that printer has a cutter, so the cutter setting comes back whenever the printer
+is chosen. The list is held on the proxy, so it is the same for everyone who
+opens the page, and whoever sets a printer up types its address once while
+everybody after them picks the name.
+
 **Capturing a label from Rock.** Rock will not give you the ZPL for a label
 designed in its own designer, but the proxy is in the middle of every print.
 **Capture from Rock** catches one by being an ordinary printer: arm it, then
@@ -286,8 +298,9 @@ arrive **empty**: Rock substitutes its token before printing, and a test print
 has no attendance behind it. Fields are picked by position, and the list shows
 each field's font height, because the code is the one thing printed large.
 
-Templates are stored in `config/labels/`, and the record of used codes in
-`config/blank-labels.json` — both inside the folder you already back up.
+Templates are stored in `config/labels/`, the record of used codes in
+`config/blank-labels.json`, and saved printers in `config/printers.json` — all
+inside the folder you already back up.
 
 ---
 

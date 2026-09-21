@@ -499,8 +499,10 @@ If the printer has a cutter, tick **Has cutter** beside the printer address and
 the proxy sends the cut commands itself — one cut after the last label of each
 copy, so a child's tag, a parent's receipt and a roster label come off together.
 
-It is a setting for that run, not a saved printer: the proxy has no printer
-records.
+Ticking it applies to that run. If you save the printer (below), the setting is
+remembered with it and comes back whenever that printer is chosen — a cutter is
+a fact about the machine, and the person picking a printer by name is exactly
+the one who would not know. You can still untick it for a single run.
 
 This is worth ticking even if your labels already carry `^MMC`, because it means
 the cut no longer depends on which label happens to be last in the order. The
@@ -571,14 +573,35 @@ everything else carries on working.
 The proxy fetches the image itself and sends it to your browser, so the browser
 never contacts a third party.
 
+### Saving a printer
+
+The Printer box takes an address, or the name of a printer you have saved. Type
+into it and the list below narrows as you type; pick one and the box shows the
+name, not the address. The name is turned back into an address when the run
+starts, so whoever sets a printer up types its address once and everybody after
+them types the name and never sees one.
+
+Press **+** to save what is in the box. The dialog asks for a name, the address,
+and whether the printer has a cutter. Opening it on a printer already in the
+list edits that one instead. The cross on a row in the list forgets that
+printer; the printer itself is untouched.
+
+The list lives on the proxy, not in your browser, so it is the same list for
+everyone who opens the page. Nothing in the print path reads it — a run is
+always given an address — so a lost or hand-edited file costs somebody some
+typing and cannot stop anything printing. Addresses are checked when they are
+saved, with the same parser a print uses, so an address that could not be
+reached is refused where it is typed rather than when somebody presses print.
+
 ### Files it writes
 
 | Path | What it is |
 |---|---|
 | `config/labels/*.zpl` | The stored templates |
 | `config/blank-labels.json` | Where sequential numbering has reached, and the last ten runs |
+| `config/printers.json` | Printers saved by name, with their addresses and cutter settings |
 
-Both are inside `config`, so whatever backs that up already covers them.
+All are inside `config`, so whatever backs that up already covers them.
 
 ---
 
@@ -594,7 +617,11 @@ Both are inside `config`, so whatever backs that up already covers them.
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
 | **Settings → Security** | Set, change, or remove the web UI PIN |
 
-The running version is shown beside the title in the header.
+The running version is shown beside the title in the header, next to a button
+that switches between the light and dark themes. The page follows your browser's
+own light/dark setting until you press it; after that it remembers what you
+chose. The choice is kept in your browser rather than on the proxy, so two
+administrators do not fight over it.
 
 The dashboard auto-refreshes every 2 seconds. The log panel refreshes every 3
 seconds when visible, fetching only entries it has not already shown.
