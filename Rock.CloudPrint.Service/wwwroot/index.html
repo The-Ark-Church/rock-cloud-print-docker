@@ -205,7 +205,7 @@
     </div>
 
     <!-- ── Logs ──────────────────────────────────────────────────────── -->
-    <div id="pane-logs" class="hidden max-w-4xl mx-auto px-6 mt-6">
+    <div id="pane-logs" class="hidden max-w-5xl mx-auto px-6 mt-6">
         <div class="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
 
             <!-- Toolbar -->
@@ -224,10 +224,37 @@
                 </div>
             </div>
 
+            <!-- Filters. The toggles are built by buildLevelFilters() and
+                 syncSourceFilters(). The From row stays hidden until the first
+                 entry arrives, since its sources are discovered from the log
+                 itself rather than known ahead of time. -->
+            <div class="px-4 py-2 space-y-1.5 border-b border-gray-700 bg-gray-800">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="w-14 flex-shrink-0 text-xs text-gray-500 font-medium uppercase tracking-wide">Type</span>
+                    <div id="log-level-filters" class="flex flex-wrap items-center gap-1.5"></div>
+                </div>
+                <div id="log-source-row" class="hidden flex flex-wrap items-center gap-2">
+                    <span class="w-14 flex-shrink-0 text-xs text-gray-500 font-medium uppercase tracking-wide">From</span>
+                    <div id="log-source-filters" class="flex flex-wrap items-center gap-1.5"></div>
+                </div>
+            </div>
+
             <!-- Log entries -->
-            <div id="log-container" class="h-96 overflow-y-auto p-3">
-                <div id="log-list"></div>
-                <div id="log-empty" class="text-gray-600 text-xs py-2">No log entries yet.</div>
+            <div id="log-container" class="h-96 overflow-auto">
+                <div class="min-w-[46rem]">
+
+                    <!-- Column headers -->
+                    <div class="flex sticky top-0 z-10 px-3 py-1.5 bg-gray-800 border-b border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        <span class="w-40 flex-shrink-0">Date / Time</span>
+                        <span class="w-24 flex-shrink-0">Log Type</span>
+                        <span class="w-44 flex-shrink-0">From</span>
+                        <span class="flex-1">Message</span>
+                    </div>
+
+                    <div id="log-list" class="px-3 py-1"></div>
+                    <div id="log-empty" class="text-gray-600 text-xs px-3 py-2">No log entries yet.</div>
+
+                </div>
             </div>
 
         </div>
@@ -1168,6 +1195,134 @@
         let logLastSeq     = 0;
         let logInstanceId  = null;
 
+        // Log types offered as filter toggles. The sink drops anything below
+        // Information, so those are the only levels that can appear. A level
+        // that somehow does appear without a toggle is always shown.
+        const LOG_LEVELS = ['Information', 'Warning', 'Error', 'Critical'];
+
+        // What the user has switched off. Empty means "show everything". Sources
+        // are not known ahead of time the way levels are - they are discovered
+        // from the entries as they arrive.
+        const hiddenLevels  = new Set();
+        const hiddenSources = new Set();
+
+        // Styles a filter toggle: lit in onColor when active, dimmed when not.
+        function paintFilterButton( btn, on, onColor ) {
+            btn.className = 'px-2 py-0.5 rounded border text-xs transition-colors ' + ( on
+                ? 'bg-gray-700 border-gray-600 ' + onColor
+                : 'bg-gray-900 border-gray-700 text-gray-600 hover:text-gray-400' );
+            btn.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+        }
+
+        function buildLevelFilters() {
+            const host = document.getElementById( 'log-level-filters' );
+            if ( host.childElementCount > 0 ) return;   // already built
+
+            LOG_LEVELS.forEach( level => {
+                const btn = document.createElement( 'button' );
+                btn.type          = 'button';
+                btn.dataset.level = level;
+                btn.textContent   = level;
+                btn.onclick       = () => toggleLevelFilter( level );
+                host.appendChild( btn );
+            } );
+
+            paintLevelFilters();
+        }
+
+        function paintLevelFilters() {
+            document.querySelectorAll( '#log-level-filters button' ).forEach( btn => {
+                paintFilterButton( btn, !hiddenLevels.has( btn.dataset.level ),
+                    LEVEL_COLORS[btn.dataset.level] || 'text-gray-200' );
+            } );
+        }
+
+        function toggleLevelFilter( level ) {
+            if ( hiddenLevels.has( level ) ) {
+                hiddenLevels.delete( level );
+            } else {
+                hiddenLevels.add( level );
+            }
+
+            paintLevelFilters();
+            applyLogFilter();
+        }
+
+        // Adds a toggle for any source seen for the first time. Sources are kept
+        // in alphabetical order, so the buttons are rebuilt rather than appended.
+        // Ones already known are kept even after they age out of the buffer, so a
+        // toggle never disappears from under the user mid-session.
+        function syncSourceFilters( entries ) {
+            const host  = document.getElementById( 'log-source-filters' );
+            const known = new Set( [...host.children].map( b => b.dataset.source ) );
+            const found = new Set( entries.map( e => e.category || '' ).filter( c => c !== '' ) );
+
+            if ( [...found].every( c => known.has( c ) ) ) return;   // nothing new
+
+            const all = [...new Set( [...known, ...found] )].sort();
+            host.innerHTML = '';
+
+            all.forEach( source => {
+                const btn = document.createElement( 'button' );
+                btn.type           = 'button';
+                btn.dataset.source = source;
+                btn.textContent    = source;
+                btn.onclick        = () => toggleSourceFilter( source );
+                host.appendChild( btn );
+            } );
+
+            document.getElementById( 'log-source-row' ).classList.toggle( 'hidden', all.length === 0 );
+            paintSourceFilters();
+        }
+
+        function paintSourceFilters() {
+            document.querySelectorAll( '#log-source-filters button' ).forEach( btn => {
+                paintFilterButton( btn, !hiddenSources.has( btn.dataset.source ), 'text-blue-400' );
+            } );
+        }
+
+        function toggleSourceFilter( source ) {
+            if ( hiddenSources.has( source ) ) {
+                hiddenSources.delete( source );
+            } else {
+                hiddenSources.add( source );
+            }
+
+            paintSourceFilters();
+            applyLogFilter();
+        }
+
+        // Shows or hides already-rendered rows to match the selected filters. A
+        // row must pass both Type and From to be shown. Only entry rows carry a
+        // data-level, so the stream notices are never filtered or counted.
+        function applyLogFilter() {
+            const rows = document.querySelectorAll( '#log-list > div[data-level]' );
+            let visible = 0;
+
+            rows.forEach( row => {
+                const show = !hiddenLevels.has( row.dataset.level )
+                          && !hiddenSources.has( row.dataset.source );
+                row.classList.toggle( 'hidden', !show );
+                if ( show ) visible++;
+            } );
+
+            const empty = document.getElementById( 'log-empty' );
+            empty.textContent = rows.length === 0
+                ? 'No log entries yet.'
+                : 'No log entries match the selected filters.';
+            empty.classList.toggle( 'hidden', visible > 0 );
+        }
+
+        // Local date and time, zero-padded so the column stays aligned.
+        function fmtLogTimestamp( iso ) {
+            const d = new Date( iso );
+            if ( isNaN( d.getTime() ) ) return '';
+
+            const p = n => String( n ).padStart( 2, '0' );
+            return d.getFullYear() + '-' + p( d.getMonth() + 1 ) + '-' + p( d.getDate() ) +
+                   ' ' + p( d.getHours() ) + ':' + p( d.getMinutes() ) + ':' + p( d.getSeconds() );
+        }
+
         // A divider for something that happened to the stream itself rather than
         // a logged event - a restart, or entries that aged out before we asked.
         function appendLogNotice( list, text ) {
@@ -1178,13 +1333,14 @@
         }
 
         async function refreshLogs() {
+            buildLevelFilters();
+
             try {
                 const resp = await authFetch( '/api/logs' + ( logLastSeq ? '?after=' + logLastSeq : '' ) );
                 if ( !resp.ok ) return;
                 const data = await resp.json();
 
                 const list      = document.getElementById( 'log-list' );
-                const empty     = document.getElementById( 'log-empty' );
                 const container = document.getElementById( 'log-container' );
 
                 // The service restarted, so its sequence numbers began again and
@@ -1202,35 +1358,36 @@
                 const entries = data.entries || [];
 
                 if ( data.skipped > 0 ) {
-                    empty.classList.add( 'hidden' );
                     appendLogNotice( list, data.skipped.toLocaleString() +
                         ( data.skipped === 1 ? ' entry not shown' : ' entries not shown' ) );
                 }
 
+                syncSourceFilters( entries );
+
                 if ( entries.length > 0 ) {
                     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 60;
 
-                    empty.classList.add( 'hidden' );
-
                     entries.forEach( e => {
                         const color = LEVEL_COLORS[e.level] || 'text-gray-300';
-                        const ts    = new Date( e.timestamp ).toLocaleTimeString( undefined, { hour12: false } );
-                        const lvl   = (e.level || '').substring( 0, 4 ).toUpperCase();
                         const row   = document.createElement( 'div' );
-                        row.className = 'flex text-xs leading-5 ' + color;
+                        row.dataset.level  = e.level || '';
+                        row.dataset.source = e.category || '';
+                        row.className      = 'flex text-xs leading-5 ' + color;
                         row.innerHTML =
-                            '<span class="text-gray-600 w-20 flex-shrink-0">'  + ts                     + '</span>' +
-                            '<span class="w-10 flex-shrink-0">'                + lvl                    + '</span>' +
-                            '<span class="text-blue-500 w-36 flex-shrink-0 truncate mr-2">' + escHtml( e.category ) + '</span>' +
-                            '<span class="flex-1 break-all">'                  + escHtml( e.message )   + '</span>';
+                            '<span class="text-gray-500 w-40 flex-shrink-0 tabular-nums">' + fmtLogTimestamp( e.timestamp ) + '</span>' +
+                            '<span class="w-24 flex-shrink-0 truncate pr-2">'              + escHtml( e.level )             + '</span>' +
+                            '<span class="text-blue-500 w-44 flex-shrink-0 truncate pr-2">' + escHtml( e.category )         + '</span>' +
+                            '<span class="flex-1 break-all">'                              + escHtml( e.message )           + '</span>';
                         list.appendChild( row );
                     } );
+
+                    applyLogFilter();
 
                     if ( document.getElementById( 'log-autoscroll' ).checked && atBottom ) {
                         container.scrollTop = container.scrollHeight;
                     }
-                } else if ( list.children.length === 0 ) {
-                    empty.classList.remove( 'hidden' );
+                } else {
+                    applyLogFilter();
                 }
 
                 logLastSeq = data.lastSeq;
@@ -1240,8 +1397,8 @@
         // Clears what is on screen only. The position is kept, so the pane picks
         // up from now rather than replaying everything still in the buffer.
         function clearLogs() {
-            document.getElementById( 'log-list'  ).innerHTML = '';
-            document.getElementById( 'log-empty' ).classList.remove( 'hidden' );
+            document.getElementById( 'log-list' ).innerHTML = '';
+            applyLogFilter();
         }
 
         function escHtml( str ) {
