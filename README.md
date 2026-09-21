@@ -42,10 +42,11 @@ sudo usermod -aG docker $USER   # run docker without sudo (re-login after)
    ```
 
 2. **Open port 8080**
-
+   > If using ufw use the following cmd
    ```bash
    sudo ufw allow 8080/tcp
    ```
+   > If you are using another firewall on your device, use the command for your device.
 
 3. **Enable auto-start on reboot**
 
@@ -246,6 +247,7 @@ The server returned status code '400' when status code '101' was expected.
 2. Open or create a proxy device
 3. Copy the **IdKey** (a short encoded value like `da0BJR0Bpz`) or the full **Guid**. On the device page, click the three-dot menu at the top right, then click the `Id` label — it cycles through Id, Guid and IdKey
 4. Paste it into **Proxy ID** in Settings
+5. **You can run multiple proxies at the same campus with the same identifier**
 
 ---
 
@@ -269,7 +271,7 @@ The dashboard refreshes every 2 seconds. The log panel refreshes every 3 seconds
 
 **Labels Requested** counts every label Rock asked for, whether or not it reached a printer. **Printed** and **Failed** split that total by what happened.
 
-**Too Slow** counts prints that finished after Rock stopped waiting. Rock's check-in kiosk allows five seconds and then shows the operator its own timeout message, so anything slower finished too late for the operator to see the real result — even when the labels printed correctly a moment later. Adjust with `SlowPrintMilliseconds` (default `5000`, `0` disables the check).
+**Too Slow** counts prints that finished after Rock stopped waiting. Rock's check-in kiosk allows five seconds and then shows the operator its own timeout message, so anything slower finished too late for the operator to see the real result — even when the labels printed correctly a moment later. Adjust with `SlowPrintMilliseconds` (default `5000`, `0` disables the check). This happens most often on Wi-Fi printers if they have gone to sleep, but it could also be a congested campus network.
 
 When a print fails, the reason shown is the exact message the proxy returned to Rock, so it matches what appeared on the check-in screen.
 
@@ -354,10 +356,10 @@ Rock will not hand out the ZPL for a label designed in its own designer. But the
 **This is for a label you designed *as a blank*** — with lines to write on and a placeholder where the code goes. A normal check-in label will not do: designed labels write text straight into fields and carry nothing to write on, because nothing is ever hand-written on them, so blanking one leaves empty space with no indication of what goes where.
 
 1. On **Blank Labels**, press **Capture from Rock**, then **Wait for a label**. It listens on port 9100 by default.
-2. In Rock, set a printer's address to this machine and print one label to it. A check-in label's test print does it. No port is needed — an address without one means 9100.
+2. In Rock, create a new printer device and set a printer's address to this machine and print one label to it. A check-in label's test print does it. No port is needed — an address without one means 9100.
 3. Pick which fields hold the security code, name the label, and save.
 
-**Nothing here needs to be connected to Rock.** Whichever proxy Rock already sends that label to is the one that opens the connection, so the address only has to be reachable *from that proxy* — it is an ordinary printer address as far as it is concerned, and can be a different machine entirely. If the proxy you are capturing with is itself the one Rock routes to, use `127.0.0.1:9100` and nothing crosses a network.
+**Nothing here needs to be connected to Rock.** Whichever proxy Rock already sends that label to is the one that opens the connection, so the address only has to be reachable *from that proxy* — it is an ordinary printer address as far as it is concerned, and can be a different machine entirely. If the proxy you are capturing with is itself the one Rock routes to, use the proxy's IP address in the printer you created in rock.
 
 It listens only while armed and stops after one label, so arming it and forgetting cannot quietly record a real child's label during a service. A connection that sends nothing — a reachability check, a port scan, the proxy's own printer test — is ignored and it keeps waiting.
 
@@ -365,7 +367,7 @@ It listens only while armed and stops after one label, so arming it and forgetti
 
 That is why fields are chosen by position rather than by text, and why the list shows each field's font height. The security code is the one thing on a check-in label printed large, so on a real label it stands out from the captions by a factor of three or four; the tallest fields are ticked for you. Pick more than one where the label needs it — a receipt torn in half carries the code on both halves.
 
-> **Legacy labels cannot be captured.** Rock's legacy label editor test-prints straight from the Rock server with its own socket and never consults the proxy, so the job never arrives here. Legacy labels are raw ZPL you can already see, so copy it out of the editor and upload it instead.
+> **Legacy labels cannot be captured.** Rock's legacy label editor test-prints straight from the Rock server with its own socket and never consults the proxy, so the job never arrives here. Legacy labels are raw ZPL you can already see, so copy it out of the editor, create a label.zpl file, and upload it instead.
 
 ### Preview
 
