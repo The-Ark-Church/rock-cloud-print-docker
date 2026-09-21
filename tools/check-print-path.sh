@@ -59,7 +59,14 @@ untouchable=(
     Rock.CloudPrint.Service/FailureNotifier.cs
 )
 
-baseline="${BASELINE:-v1.4.0}"
+# The baseline is the current release, not a fixed point in history. Any change
+# to the files below is a deliberate release decision, so bumping this is part
+# of making one - and leaving it alone is what catches the accidental change
+# this script exists for.
+#
+# v1.5.1 moved it: ProxyWorker gained its own ILogger<ProxyClientWebSocket> so
+# print activity is attributed separately from worker activity in the log view.
+baseline="${BASELINE:-v1.5.1}"
 failed=0
 
 echo "Searching the blank label files for anything that would tie them to the print path."
