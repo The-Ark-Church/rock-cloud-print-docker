@@ -357,8 +357,6 @@
                     above has to be routable from there. Note that this also works with printing from
                     the Rock server as well. No other print proxy is needed.
                 </p>
-                <p id="capture-loopback-note" class="text-gray-500"></p>
-
                 <div class="flex items-center gap-2 pt-1">
                     <label class="text-gray-500">Port</label>
                     <input id="capture-port" type="number" min="1" max="65535" value="9100"
@@ -2136,15 +2134,10 @@
         // connection, which is not necessarily this one. The ordinary case is a
         // production proxy elsewhere sending here as if this were a printer, so
         // the address it needs is this machine's - the one the browser reached
-        // it on is the best available guess at that. Loopback is offered
-        // alongside for when this proxy is itself the one Rock routes to.
+        // it on is the best available guess at that.
         function updateCaptureAddress() {
             const port = document.getElementById( 'capture-port' ).value || '9100';
             document.getElementById( 'capture-address' ).textContent = location.hostname + ':' + port;
-            document.getElementById( 'capture-loopback-note' ).innerHTML =
-                'If this proxy is itself the one Rock sends the label to, use ' +
-                '<code class="bg-white px-1 rounded border border-gray-200">127.0.0.1:' + port + '</code> ' +
-                'instead — it connects to itself, so nothing crosses a network at all.';
         }
 
         function showCaptureMessage( kind, html ) {
