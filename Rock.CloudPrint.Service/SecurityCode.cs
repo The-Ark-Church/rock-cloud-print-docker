@@ -39,11 +39,10 @@ namespace Rock.CloudPrint.Service;
 internal static class SecurityCode
 {
     /// <summary>
-    /// The symbols a random code is drawn from: no zero, capital O, one or
-    /// capital I. Somebody reads this off a label and says it out loud at a
-    /// pickup desk, so the pairs that get misread are simply not used.
+    /// The symbols a random code is drawn from: every digit and every capital
+    /// letter.
     /// </summary>
-    public const string Alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    public const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     /// <summary>
     /// A security code is printed large enough to read at a glance from a
@@ -82,8 +81,8 @@ internal static class SecurityCode
     ///
     /// <para>
     /// This is the only arithmetic limit on a run, and it is not a policy: it
-    /// prevents a run that cannot finish. Three characters gives 32,768 codes,
-    /// so any realistic quantity is fine; two gives 1,024, where a thousand
+    /// prevents a run that cannot finish. Three characters gives 46,656 codes,
+    /// so any realistic quantity is fine; two gives 1,296, where a thousand
     /// distinct codes is impossible. Requiring twice the room rather than just
     /// enough also keeps the generator's work bounded, since every draw is
     /// then at least even money to be one not already taken.

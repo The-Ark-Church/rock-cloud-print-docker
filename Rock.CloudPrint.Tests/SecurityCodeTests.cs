@@ -7,7 +7,7 @@ namespace Rock.CloudPrint.Tests;
 /// <summary>
 /// The codes themselves: that a sequential run counts the way somebody reading
 /// a stack of labels would expect, and that a random run cannot hand out the
-/// same code twice or a character somebody will misread.
+/// same code twice.
 /// </summary>
 public class SecurityCodeTests
 {
@@ -61,7 +61,7 @@ public class SecurityCodeTests
     }
 
     [Fact]
-    public void Random_NeverUsesACharacterThatGetsMisread()
+    public void Random_DrawsOnlyFromTheAlphabet()
     {
         var codes = SecurityCode.Random( 3, 1000 );
 
@@ -71,21 +71,35 @@ public class SecurityCodeTests
 
             foreach ( var character in code )
             {
-                // Zero against capital O, and one against capital I. Somebody
-                // reads this off a label and says it out loud at a pickup desk.
-                Assert.DoesNotContain( character, "0O1I" );
                 Assert.Contains( character, SecurityCode.Alphabet );
             }
         }
     }
 
     [Fact]
-    public void CodeSpace_IsThirtyTwoToThePower()
+    public void Alphabet_IsEveryDigitAndCapitalLetter()
     {
-        Assert.Equal( 32, SecurityCode.CodeSpace( 1 ) );
-        Assert.Equal( 1024, SecurityCode.CodeSpace( 2 ) );
-        Assert.Equal( 32768, SecurityCode.CodeSpace( 3 ) );
-        Assert.Equal( 1099511627776, SecurityCode.CodeSpace( SecurityCode.MaxLength ) );
+        // Nothing is held back. A run of this size over 46,656 codes draws
+        // every symbol many times over, so a missing one would show here.
+        var drawn = SecurityCode.Random( 4, 20000 ).SelectMany( c => c ).ToHashSet();
+
+        Assert.Equal( 36, SecurityCode.Alphabet.Length );
+        Assert.Equal( 36, drawn.Count );
+
+        foreach ( var character in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" )
+        {
+            Assert.Contains( character, SecurityCode.Alphabet );
+            Assert.Contains( character, drawn );
+        }
+    }
+
+    [Fact]
+    public void CodeSpace_IsThirtySixToThePower()
+    {
+        Assert.Equal( 36, SecurityCode.CodeSpace( 1 ) );
+        Assert.Equal( 1296, SecurityCode.CodeSpace( 2 ) );
+        Assert.Equal( 46656, SecurityCode.CodeSpace( 3 ) );
+        Assert.Equal( 2821109907456, SecurityCode.CodeSpace( SecurityCode.MaxLength ) );
     }
 
     [Fact]
@@ -100,7 +114,7 @@ public class SecurityCodeTests
     [Fact]
     public void HasRoomFor_RefusesARunThatCouldNotSucceed()
     {
-        // Two characters is 1,024 codes. A thousand distinct ones is not
+        // Two characters is 1,296 codes. A thousand distinct ones is not
         // impossible by a comfortable margin, it is nearly the whole space.
         Assert.False( SecurityCode.HasRoomFor( 2, 1000 ) );
         Assert.False( SecurityCode.HasRoomFor( 1, 100 ) );

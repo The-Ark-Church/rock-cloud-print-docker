@@ -208,7 +208,7 @@ Three demo templates are included, so there is something to print on a fresh ins
 
 **A label** is a ZPL file with a placeholder where the code goes: `WWW` as the whole of a field (what Rock's own legacy labels use), or `???` anywhere inside one. Write it anywhere that produces ZPL and upload it. The label's size is fixed in the file by `^PW` and `^LL`, so load the stock that matches — the size is shown beside each label. Put anything in cutter mode (`^MMC`) last in the order, or the cut lands in the middle of a copy.
 
-**Codes** are random from an alphabet with no `0`, `O`, `1` or `I`, or sequential. How many characters fit is decided by the label — the three demo templates are designed for three. Longer codes are clipped rather than shrunk, so preview first, or upload a template laid out for more. Sequential numbering is remembered between runs, so two batches printed months apart cannot carry the same codes, and codes are reserved before anything is sent, so a failed run leaves a gap rather than repeating itself later.
+**Codes** are random from the digits and capital letters, or sequential. How many characters fit is decided by the label — the three demo templates are designed for three. Longer codes are clipped rather than shrunk, so preview first, or upload a template laid out for more. Sequential numbering is remembered between runs, so two batches printed months apart cannot carry the same codes, and codes are reserved before anything is sent, so a failed run leaves a gap rather than repeating itself later.
 
 **A few things worth knowing:**
 

@@ -281,8 +281,8 @@ def main():
               "%d of 300" % shared)
         check("both halves of the parent receipt carry it too", receipts == 300,
               "%d of 300" % receipts)
-        check("no code contains a character that gets misread",
-              not any(set(code) & set("0O1I") for code in codes))
+        check("every code is drawn from the alphabet and nothing else",
+              all(set(code) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") for code in codes))
     else:
         check("the stream is exactly 300 copies long", False, "nothing captured")
 

@@ -313,7 +313,7 @@ The demos can be deleted like any other label, and downloaded again from `Rock.C
 
 ### Codes
 
-**Random** codes are drawn from 32 characters with no `0`, `O`, `1` or `I`, because somebody reads the code aloud at a pickup desk. They are deduplicated within a run.
+**Random** codes are drawn from every digit and capital letter, and are deduplicated within a run.
 
 **Sequential** codes count up from a number you give, and **the proxy remembers where it got to**, so labels printed in March and in June cannot carry the same numbers. Leave the start blank to carry on from the last run.
 
