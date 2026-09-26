@@ -186,7 +186,7 @@ Always on:
 
 | Layer | What it does |
 |---|---|
-| **Login rate limit** | `/api/auth/login` is capped at 5 attempts per minute; excess returns HTTP 429 |
+| **Rate limits** | `/api/auth/login` allows 5 attempts a minute from each client address, and 30 a minute across all of them, so a mistyped PIN elsewhere cannot lock you out and many addresses together still cannot guess quickly. Printer tests, notification tests and starting a blank-label run each have their own per-address limit. Excess returns HTTP 429 with a message and a `Retry-After` header. The address is taken from the connection, not `X-Forwarded-For` — behind a reverse proxy every client would share one allowance unless forwarded headers are configured deliberately |
 | **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` restricting script/style/image sources |
 | **Server header suppression** | `Server: Kestrel` is disabled, so the stack is not advertised |
 | **Non-root runtime** | Runs as `appuser` (UID 1000), chosen to match the typical host volume owner so `./config` stays writable without privilege escalation |
@@ -663,6 +663,7 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/PrinterAddress.cs` | New — printer address parsing, lifted out of the print path so the web UI's test runs the same code rather than a copy of it |
 | `Rock.CloudPrint.Service/PrinterTester.cs` | New — opens a connection to a printer and reports the result, without printing |
 | `Rock.CloudPrint.Service/FailureNotifier.cs` | New — reports print failures to a Rock webhook, with per-printer debouncing, and remembers the last attempt so the dashboard can name the fault |
+| `Rock.CloudPrint.Service/RateLimiting.cs` | New — per-client rate limit keys, the message a refused request is given, and the limiter that counts a login against its own client before the shared ceiling |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication |
 | `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only, cleared on restart. Entries carry a sequence number so the UI fetches only what is new |
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` capturing `Rock.CloudPrint.*` entries only |
