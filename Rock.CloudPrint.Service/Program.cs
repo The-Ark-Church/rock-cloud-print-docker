@@ -94,19 +94,58 @@ public class Program
 
         builder.Services.AddHostedService<ProxyWorker>();
 
-        // Rate limit /api/auth/login to 5 attempts per minute per source.
-        // Excess attempts return HTTP 429 with no queue, blocking PIN brute-force
-        // attacks against the web UI without affecting normal interactive logins.
+        // Every limit below except Labelary's is counted per client address,
+        // so one person's wrong PINs or test presses cannot use up somebody
+        // else's allowance. RateLimitKeys explains why the address comes from
+        // the socket and never from X-Forwarded-For. None of them queue: an
+        // excess request is answered with 429 straight away.
         builder.Services.AddRateLimiter( options =>
         {
             options.RejectionStatusCode = 429;
-            options.AddFixedWindowLimiter( "login", o =>
+
+            // A JSON body the UI can show as it is, and a Retry-After header
+            // when the limiter knows how long the wait is.
+            options.OnRejected = async ( context, cancellationToken ) =>
             {
-                o.PermitLimit = 5;
-                o.Window = TimeSpan.FromMinutes( 1 );
-                o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                o.QueueLimit = 0;
+                TimeSpan? retryAfter = null;
+
+                if ( context.Lease.TryGetMetadata( MetadataName.RetryAfter, out var wait ) )
+                {
+                    retryAfter = wait;
+                    context.HttpContext.Response.Headers.RetryAfter = RateLimitRejection.RetryAfterHeader( wait );
+                }
+
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    new { error = RateLimitRejection.Message( retryAfter ) }, cancellationToken );
+            };
+
+            // Five PIN attempts a minute from any one address, which a person
+            // mistyping never reaches and a script guessing is held to. On top
+            // of that, thirty a minute across every address together, so that
+            // somebody with many addresses - an IPv6 host can have as many as
+            // it likes - still cannot guess quickly. A client's own limit is
+            // checked first, so one address hammering away is turned back
+            // before it touches the shared thirty and cannot lock anybody else
+            // out; that takes at least six addresses working at once.
+            var loginCeiling = new FixedWindowRateLimiter( new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes( 1 ),
+                QueueLimit = 0,
+                AutoReplenishment = true
             } );
+
+            options.AddPolicy( "login", httpContext => RateLimitPartition.Get(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new ClientThenSharedLimiter(
+                    new FixedWindowRateLimiter( new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes( 1 ),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    } ),
+                    loginCeiling ) ) );
 
             // The printer test opens a TCP connection to whatever address it is
             // given. That is not a capability an authenticated user lacks - they
@@ -114,18 +153,47 @@ public class Program
             // but it is a far more convenient one, so it is capped. Ten a minute
             // is generous for someone pressing a button and useless for sweeping
             // a subnet.
-            options.AddFixedWindowLimiter( "printertest", o =>
-            {
-                o.PermitLimit = 10;
-                o.Window = TimeSpan.FromMinutes( 1 );
-                o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                o.QueueLimit = 0;
-            } );
+            options.AddPolicy( "printertest", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes( 1 ),
+                    QueueLimit = 0
+                } ) );
+
+            // The notification test calls the Rock workflow, which messages real
+            // people. Five a minute is plenty to check a change took effect and
+            // keeps an impatient finger from filling somebody's phone.
+            options.AddPolicy( "notificationtest", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes( 1 ),
+                    QueueLimit = 0
+                } ) );
+
+            // Starting a blank-label run opens a connection to an arbitrary
+            // address, like the printer test. A run is long-lived and only one
+            // runs at a time anyway, so a modest limit costs nobody anything;
+            // it has its own bucket so that testing a printer first never
+            // makes the real run come back refused.
+            options.AddPolicy( "labelprint", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes( 1 ),
+                    QueueLimit = 0
+                } ) );
 
             // The preview endpoint calls a third-party service on every press.
             // Labelary publishes a free-tier rate for exactly this, and staying
             // under it is good manners rather than a security measure - the
-            // caller is already past the PIN.
+            // caller is already past the PIN. It is deliberately one limit for
+            // the whole installation, not per client: the rate Labelary asks
+            // for applies to this proxy however many people are using it.
             options.AddFixedWindowLimiter( "labelary", o =>
             {
                 o.PermitLimit = 3;
@@ -569,7 +637,7 @@ public class Program
                 outcome = attempt.Outcome,
                 detail = attempt.Detail
             } );
-        } ).RequireRateLimiting( "printertest" );
+        } ).RequireRateLimiting( "notificationtest" );
 
         // ── Blank labels ───────────────────────────────────────────────────
         // The stored ZPL templates that blank check-in labels are printed from.
@@ -814,7 +882,7 @@ public class Program
 
                 _ => Results.Json( new { error = "That run could not be started." }, statusCode: 400 )
             };
-        } ).RequireRateLimiting( "printertest" );
+        } ).RequireRateLimiting( "labelprint" );
 
         // What the UI needs on load and while polling: the run, where the
         // numbering has reached, and what went out before.
