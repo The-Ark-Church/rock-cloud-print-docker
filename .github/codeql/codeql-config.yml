@@ -1,0 +1,29 @@
+# Configuration for the CodeQL workflow in .github/workflows/codeql.yml.
+name: rock-cloudprint
+
+# security-extended adds lower-precision security queries on top of the
+# default set. The codebase is small enough that reviewing the extra alerts
+# is cheap, and this service holds a Rock PIN and forwards traffic onto the
+# network, so a missed finding costs more than a false positive does. The
+# broader security-and-quality suite is left out: its maintainability noise
+# would bury the security alerts this workflow exists for.
+queries:
+  - uses: security-extended
+
+# Only code that is committed and shipped is worth scanning.
+#
+# node_modules and wwwroot/app.css are ignored by git, so on a clean
+# checkout in Actions they do not exist. They are listed anyway so a local
+# `codeql database create` from a working copy - where `npm run css` has
+# been run - gives the same results as CI instead of analysing Tailwind.
+#
+# docs/ holds a Rock workflow export and instructions, not code this repo
+# runs.
+#
+# tools/ is deliberately NOT ignored: the shell and Python test harnesses
+# there are not analysed anyway, because python is not in the language
+# matrix, and anything else that lands there should be seen.
+paths-ignore:
+  - '**/node_modules'
+  - Rock.CloudPrint.Service/wwwroot/app.css
+  - docs

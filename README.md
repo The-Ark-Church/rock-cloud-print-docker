@@ -558,6 +558,10 @@ Rolling back is then editing that line to the previous version and running `dock
 
 Version numbers follow [semantic versioning](https://semver.org): patch for fixes, minor for new functionality that breaks nothing, major if an upgrade requires you to change something.
 
+### Security scanning
+
+Every pull request, every push to `main`, and a weekly scheduled run are analysed by [CodeQL](https://codeql.github.com) for both the C# service and the web UI's JavaScript. Results are listed under the repository's **Security → Code scanning** tab, and a pull request that introduces an alert gets it as an inline annotation on the changed line. The weekly run exists because CodeQL's queries improve on their own schedule, so unchanged code can still gain new findings.
+
 ---
 
 ## Common commands
