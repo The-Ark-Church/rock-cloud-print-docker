@@ -56,6 +56,15 @@ public class Program
 
     public static void Main( string[] args )
     {
+        // The container's HEALTHCHECK runs the image's own binary in this mode
+        // rather than curl, which the ASP.NET base image does not ship. It
+        // probes the running instance and exits; nothing below is started.
+        if ( args.Contains( "--healthcheck" ) )
+        {
+            Environment.ExitCode = RunHealthCheck();
+            return;
+        }
+
         var builder = WebApplication.CreateBuilder( args );
 
         // Wire up the in-memory log sink before building so the logger
@@ -246,6 +255,23 @@ public class Program
             var token  = header.StartsWith( "Bearer " ) ? header["Bearer ".Length..] : string.Empty;
             if ( !string.IsNullOrEmpty( token ) ) auth.RevokeToken( token );
             return Results.Ok( new { success = true } );
+        } );
+
+        // ── Public health endpoint ────────────────────────────────────────
+        // Outside /api so the auth middleware leaves it alone: Docker has no
+        // PIN to send. Being open to anyone, it answers with two fixed fields and
+        // nothing else - no server URL, proxy ID, name, or version, all of
+        // which /api/status gives to anyone who has signed in.
+        app.MapGet( "/healthz", ( ProxyStatus status, IOptionsMonitor<CloudPrintOptions> options ) =>
+        {
+            var isConfigured = !string.IsNullOrWhiteSpace( options.CurrentValue.Url )
+                && !string.IsNullOrWhiteSpace( options.CurrentValue.Id );
+
+            var health = ProxyHealth.Evaluate( isConfigured, status.IsConnected, status.DisconnectedDateTime, DateTimeOffset.Now );
+
+            return Results.Json(
+                new { status = health.Status, connected = health.Connected },
+                statusCode: health.Healthy ? 200 : 503 );
         } );
 
         // ── Protected endpoints ──────────────────────────────────────────
@@ -945,6 +971,53 @@ public class Program
         } );
 
         app.Run();
+    }
+
+    /// <summary>
+    /// Calls <c>/healthz</c> on the instance already running in this container
+    /// and turns the answer into an exit code: 0 for healthy, 1 for anything
+    /// else, including no answer at all.
+    ///
+    /// The port comes from the same <c>Urls</c> setting Kestrel binds to, read
+    /// from the same places, so an operator who moves the web UI to another
+    /// port does not also have to rewrite the health check.
+    /// </summary>
+    private static int RunHealthCheck()
+    {
+        var config = new ConfigurationBuilder()
+            .SetBasePath( Directory.GetCurrentDirectory() )
+            .AddEnvironmentVariables( "ASPNETCORE_" )
+            .AddJsonFile( "appsettings.json", optional: true )
+            .AddJsonFile( "config/appsettings.json", optional: true )
+            .AddEnvironmentVariables()
+            .Build();
+
+        var url = ProxyHealth.ResolveProbeUrl( config["Urls"] );
+
+        // The probe only ever talks to this container's own listener, so an
+        // HTTPS binding with a self-signed certificate is not a reason to
+        // report the proxy as down.
+        using var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
+
+        using var client = new HttpClient( handler ) { Timeout = TimeSpan.FromSeconds( 5 ) };
+
+        try
+        {
+            using var response = client.GetAsync( url ).GetAwaiter().GetResult();
+
+            Console.WriteLine( $"{(int)response.StatusCode} {response.Content.ReadAsStringAsync().GetAwaiter().GetResult()}" );
+
+            return response.IsSuccessStatusCode ? 0 : 1;
+        }
+        catch ( Exception ex )
+        {
+            Console.WriteLine( $"Health check failed: {ex.Message}" );
+
+            return 1;
+        }
     }
 
     /// <summary>

@@ -24,21 +24,43 @@ class ProxyStatus
 
     public DateTimeOffset? ConnectedDateTime { get; set; }
 
+    /// <summary>
+    /// When the connection was last lost, or when the proxy started if it has
+    /// never connected. Null while connected. The health check measures its
+    /// grace period from here, which <see cref="ConnectedDateTime"/> cannot do
+    /// because it is cleared the moment the connection drops.
+    /// </summary>
+    public DateTimeOffset? DisconnectedDateTime { get; private set; }
+
+    public ProxyStatus()
+    {
+        DisconnectedDateTime = StartedDateTime;
+    }
+
     public bool IsConnected { get; private set; }
 
     public int TotalPrinted { get; private set; }
 
     public void SetConnected( bool connected )
     {
+        // Reporting a disconnect twice must not restart the grace period, or a
+        // proxy that keeps being told it is down would never be reported so.
+        if ( !connected && !IsConnected && DisconnectedDateTime.HasValue )
+        {
+            return;
+        }
+
         IsConnected = connected;
 
         if ( connected )
         {
             ConnectedDateTime = DateTimeOffset.Now;
+            DisconnectedDateTime = null;
         }
         else
         {
             ConnectedDateTime = null;
+            DisconnectedDateTime = DateTimeOffset.Now;
         }
     }
 
