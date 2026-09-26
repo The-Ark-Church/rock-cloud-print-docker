@@ -522,6 +522,31 @@ Per printer, per kind of event, with a quiet period defaulting to five minutes. 
 
 ---
 
+## Health check
+
+The image carries a Docker `HEALTHCHECK`, so `docker compose ps`, Portainer and TrueNAS show the container as healthy or unhealthy without any setup. It calls `GET /healthz` every 30 seconds:
+
+| Proxy state | `/healthz` | Container |
+|---|---|---|
+| Connected to Rock | `200 {"status":"connected","connected":true}` | healthy |
+| No URL or Proxy ID set yet | `200 {"status":"unconfigured","connected":false}` | healthy |
+| Lost Rock less than 2 minutes ago | `200 {"status":"reconnecting","connected":false}` | healthy |
+| Configured, disconnected for 2 minutes or more | `503 {"status":"disconnected","connected":false}` | unhealthy after three failed checks |
+
+The two minutes let the reconnect backoff, which waits up to 60 seconds between attempts, ride out a Rock restart without the container being flagged. A fresh install reports healthy because nothing is wrong with it.
+
+`/healthz` needs no PIN, so it says only that much — no server URL, Proxy ID or version. It is on the same port as the web UI, so an external monitor such as Uptime Kuma can poll `http://<server-ip>:8080/healthz` too.
+
+**Docker only reports health; it does not act on it.** `restart: unless-stopped` restarts a container that exits, not one that is unhealthy. That is deliberate here: the proxy reconnects by itself, and restarting it would not fix an unreachable Rock server.
+
+```bash
+docker inspect --format '{{json .State.Health}}' $(docker compose ps -q rock-cloudprint)
+```
+
+The check runs `dotnet Rock.CloudPrint.Service.dll --healthcheck` inside the container, which reads the port from the same `Urls` setting the web UI binds to.
+
+---
+
 ## Updating
 
 ```bash
@@ -655,14 +680,16 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | File | What changed |
 |---|---|
 | `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; removed Windows runtime identifier, single-file publish, and Windows-only packages |
-| `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware |
+| `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware; added the unauthenticated `/healthz` endpoint and the `--healthcheck` probe mode |
 | `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection and `SlowPrintMilliseconds` for the slow-print threshold |
 | `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, each attempt is timed and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
-| `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection, and gives it its own `ILogger<ProxyClientWebSocket>` so print activity is attributed separately from worker activity |
+| `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection, and gives it its own `ILogger<ProxyClientWebSocket>` so print activity is attributed separately from worker activity; marks the proxy disconnected when it is stopped for a settings change, which upstream left reported as connected |
 | `Rock.CloudPrint.Service/PrintMetrics.cs` | New — records the outcome of each print attempt: labels printed, labels failed, prints that outran the server, and the reason for the most recent failure |
 | `Rock.CloudPrint.Service/PrinterAddress.cs` | New — printer address parsing, lifted out of the print path so the web UI's test runs the same code rather than a copy of it |
 | `Rock.CloudPrint.Service/PrinterTester.cs` | New — opens a connection to a printer and reports the result, without printing |
 | `Rock.CloudPrint.Service/FailureNotifier.cs` | New — reports print failures to a Rock webhook, with per-printer debouncing, and remembers the last attempt so the dashboard can name the fault |
+| `Rock.CloudPrint.Service/ProxyHealth.cs` | New — decides what `/healthz` reports, and where the `--healthcheck` probe finds it |
+| `Rock.CloudPrint.Service/ProxyStatus.cs` | Records when the connection was lost, so the health check can allow a grace period |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication |
 | `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only, cleared on restart. Entries carry a sequence number so the UI fetches only what is new |
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` capturing `Rock.CloudPrint.*` entries only |
@@ -671,7 +698,7 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/wwwroot/index.html` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications and Security panels. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css` |
 | `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Bumped `System.Text.Json` from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) |
 | `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
-| `Dockerfile` | New — multi-stage Linux build; installs `iputils-ping` and `iproute2` for in-container diagnostics; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
+| `Dockerfile` | New — multi-stage Linux build; installs `iputils-ping` and `iproute2` for in-container diagnostics; a `HEALTHCHECK` that runs the service itself with `--healthcheck`; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file, in the host `config/` directory mounted into the container |
 

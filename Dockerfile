@@ -83,4 +83,22 @@ USER appuser
 # Port the web UI listens on (also set in appsettings.json "Urls").
 EXPOSE 8080
 
+# Healthy while connected to Rock, while not yet configured, and for two minutes
+# after losing the connection so the reconnect backoff can do its job. See
+# ProxyHealth for the rules and /healthz for what it answers.
+#
+# The check runs the service's own binary with --healthcheck instead of curl.
+# The ASP.NET image ships neither curl nor wget, and installing curl would add
+# libcurl and its TLS and HTTP/2 libraries - several megabytes, and more
+# packages whose security advisories are ours to track - to make one local HTTP
+# request the runtime already in the image can make. A bash /dev/tcp probe
+# would need nothing installed but cannot read the status code, so a proxy that
+# lost Rock would still look healthy. The cost of the approach taken is a
+# short-lived dotnet process every 30 seconds.
+#
+# The start period covers startup only; the grace for a slow first connection
+# lives in the application, where it also applies to later reconnects.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD ["dotnet", "Rock.CloudPrint.Service.dll", "--healthcheck"]
+
 ENTRYPOINT ["dotnet", "Rock.CloudPrint.Service.dll"]

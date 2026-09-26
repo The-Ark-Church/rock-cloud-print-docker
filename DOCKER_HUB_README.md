@@ -171,6 +171,17 @@ Your origin URL is often `https://origin.yourdomain.com`, or the direct IP/hostn
 
 ---
 
+## Health check
+
+The image has a built-in `HEALTHCHECK` against `GET /healthz`, so Docker, Portainer and TrueNAS show whether the proxy is working:
+
+- **Healthy** — connected to Rock, not configured yet, or disconnected for under two minutes while it reconnects.
+- **Unhealthy** — configured but disconnected for two minutes or more.
+
+`/healthz` needs no PIN and returns only `{"status": ..., "connected": ...}` — no URLs, IDs or version. It is on port 8080 alongside the web UI, so external monitors can poll it too. Docker does not restart an unhealthy container by itself; the proxy keeps retrying the connection on its own.
+
+---
+
 ## Updating
 
 ```bash
