@@ -558,6 +558,12 @@ Rolling back is then editing that line to the previous version and running `dock
 
 Version numbers follow [semantic versioning](https://semver.org): patch for fixes, minor for new functionality that breaks nothing, major if an upgrade requires you to change something.
 
+### Vulnerability scanning
+
+A published image goes stale without any change here, as new CVEs are found in its base image. Every Monday the `image-scan` workflow scans `asdfinit/rock-cloudprint:latest` for both architectures and lists what it finds under the repository's **Security → Code scanning** tab. It only reports HIGH and CRITICAL findings that already have a fix, so an open alert means a rebuild would remove it. It never rebuilds or publishes anything itself.
+
+**What to do with an alert:** if the fix is in the base image (a Debian package or the .NET runtime), tag a patch release. The release build pulls the latest base image, and the alert closes on the next scan. If the fix is instead in one of the app's own NuGet packages, a rebuild alone will not pick it up: bump the package first. To check sooner, run the workflow by hand from the **Actions** tab.
+
 ---
 
 ## Common commands
