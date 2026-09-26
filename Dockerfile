@@ -12,13 +12,15 @@
 # The web UI's Tailwind CSS is compiled here rather than loaded from
 # cdn.tailwindcss.com at runtime. Building it in the image (instead of
 # committing the generated file) guarantees the stylesheet can never drift out
-# of sync with the classes used in index.html.
+# of sync with the classes used in index.html and app.js. Both are copied in:
+# app.js builds much of the page as HTML strings, and a class Tailwind cannot
+# see is purged from the stylesheet.
 FROM --platform=$BUILDPLATFORM node:20-alpine AS css
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY build/ build/
-COPY Rock.CloudPrint.Service/wwwroot/index.html Rock.CloudPrint.Service/wwwroot/
+COPY Rock.CloudPrint.Service/wwwroot/index.html Rock.CloudPrint.Service/wwwroot/app.js Rock.CloudPrint.Service/wwwroot/
 RUN npm run css
 
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build

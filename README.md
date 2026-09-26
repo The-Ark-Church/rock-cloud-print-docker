@@ -187,7 +187,7 @@ Always on:
 | Layer | What it does |
 |---|---|
 | **Login rate limit** | `/api/auth/login` is capped at 5 attempts per minute; excess returns HTTP 429 |
-| **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` restricting script/style/image sources |
+| **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` that allows scripts, styles and images from the proxy itself only. There is no `'unsafe-inline'`: the UI's JavaScript is in `app.js` and `theme.js` rather than the page, so injected inline script or `onclick=` attributes would not run |
 | **Server header suppression** | `Server: Kestrel` is disabled, so the stack is not advertised |
 | **Non-root runtime** | Runs as `appuser` (UID 1000), chosen to match the typical host volume owner so `./config` stays writable without privilege escalation |
 | **Bearer tokens in `sessionStorage`** | Cleared when the tab closes, rather than `localStorage` |
@@ -668,10 +668,10 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` capturing `Rock.CloudPrint.*` entries only |
 | `Rock.CloudPrint.Service/LabelStore.cs`, `ZplTemplate.cs`, `SecurityCode.cs`, `BlankLabelRunner.cs`, `BlankLabelState.cs`, `LabelCapture.cs`, `LabelPreview.cs`, `PrinterBook.cs`, `PrinterSocket.cs`, `AtomicFile.cs` | New — blank label printing: template storage, code generation and substitution, run execution, the record of used codes, capture, preview, and saved printers |
 | `Rock.CloudPrint.Service/appsettings.json` | Removed EventLog config; added `Urls: http://+:8080` and default empty keys |
-| `Rock.CloudPrint.Service/wwwroot/index.html` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications and Security panels. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css` |
+| `Rock.CloudPrint.Service/wwwroot/index.html`, `app.js`, `theme.js` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications and Security panels. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css`. The script lives in `app.js`, plus a small `theme.js` in `<head>` that applies dark mode before the first paint, and buttons are wired with `addEventListener` — no inline script or handlers, so the CSP needs no `'unsafe-inline'` |
 | `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Bumped `System.Text.Json` from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) |
 | `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
-| `Dockerfile` | New — multi-stage Linux build; installs `iputils-ping` and `iproute2` for in-container diagnostics; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
+| `Dockerfile` | New — multi-stage Linux build; installs `iputils-ping` and `iproute2` for in-container diagnostics; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html` and `app.js`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file, in the host `config/` directory mounted into the container |
 

@@ -163,14 +163,24 @@ public class Program
         // Applied to every response (including static files). Tailwind is
         // compiled into wwwroot/app.css at build time rather than pulled from
         // a CDN, so no third-party origin is allowed here and style-src needs
-        // no 'unsafe-inline'. script-src still needs 'unsafe-inline' because
-        // the SPA keeps its JavaScript in an inline <script> block and uses
-        // inline onclick handlers.
+        // no 'unsafe-inline'. Neither does script-src: the SPA's JavaScript
+        // lives in wwwroot/app.js and wwwroot/theme.js, and its buttons are
+        // wired with addEventListener rather than inline onclick attributes,
+        // so an injected <script> or on*="" attribute simply does not run.
         //   X-Frame-Options:        defence against clickjacking embed
         //   X-Content-Type-Options: disables MIME-type sniffing
         //   Referrer-Policy:        prevents Rock URL leakage via Referer
         //   Cache-Control:          stops sensitive pages from being cached
-        //   Content-Security-Policy:restricts what the page may load/run
+        //   Content-Security-Policy:restricts what the page may load/run.
+        //     base-uri, form-action and frame-ancestors do not fall back to
+        //     default-src, so each is set here: base-uri stops an injected
+        //     <base> from re-pointing the page's relative URLs at another
+        //     host, form-action stops a form being pointed elsewhere, and
+        //     frame-ancestors is the modern form of X-Frame-Options.
+        //     object-src 'none' goes further than default-src's 'self'. The
+        //     page uses no plugins, <base>, or forms that submit anywhere
+        //     (everything goes through fetch), so none of these take
+        //     anything away from it.
         app.Use( async ( ctx, next ) =>
         {
             ctx.Response.Headers["X-Frame-Options"]        = "DENY";
@@ -179,9 +189,13 @@ public class Program
             ctx.Response.Headers["Cache-Control"]          = "no-store";
             ctx.Response.Headers["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline'; " +
+                "script-src 'self'; " +
                 "style-src 'self'; " +
-                "img-src 'self' data:;";
+                "img-src 'self' data:; " +
+                "object-src 'none'; " +
+                "base-uri 'none'; " +
+                "form-action 'self'; " +
+                "frame-ancestors 'none';";
             await next();
         } );
 
