@@ -558,6 +558,14 @@ Rolling back is then editing that line to the previous version and running `dock
 
 Version numbers follow [semantic versioning](https://semver.org): patch for fixes, minor for new functionality that breaks nothing, major if an upgrade requires you to change something.
 
+### Dependency updates
+
+Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens pull requests every Monday morning for the workflow actions, the Dockerfile's base images, the NuGet packages and the Tailwind build. Minor and patch updates come as one pull request per ecosystem. Majors that need a deliberate decision are ignored and done by hand: .NET, Node, the `Microsoft.Extensions.*` packages the net472 build relies on, and Tailwind 4. For maintainers:
+
+- **Merge only once the build check passes.** That check proves the image still builds for both architectures. Nothing is published until a tag is pushed.
+- **Merging does not update anyone's image.** The published image changes only when a tag is pushed, so an update that matters to what runs, such as a base image or a runtime package, is also the signal to cut a patch release. Updates to the actions or to Tailwind alone can wait for the next release.
+- **The base images use floating tags** such as `node:<major>-alpine`, not digests, so their security patches arrive when the image is rebuilt, not through a pull request. Cutting a patch release now and then, even with no code changes, is how those patches reach the published image.
+
 ---
 
 ## Common commands
