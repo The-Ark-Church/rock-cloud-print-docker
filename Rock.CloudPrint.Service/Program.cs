@@ -78,6 +78,9 @@ public class Program
 
         builder.Services.AddHttpClient( "labelary" );
         builder.Services.AddSingleton<LabelPreview>();
+        // AuthService takes the clock as a dependency so its tests can move
+        // time forward; here it is simply the system clock.
+        builder.Services.AddSingleton( TimeProvider.System );
         builder.Services.AddSingleton<AuthService>();
 
         // Redirects are NOT followed: a URL matching no webhook in Rock redirects
@@ -219,7 +222,7 @@ public class Program
                     var header = context.Request.Headers.Authorization.FirstOrDefault() ?? string.Empty;
                     var token  = header.StartsWith( "Bearer " ) ? header["Bearer ".Length..] : string.Empty;
 
-                    if ( !auth.ValidateToken( token ) )
+                    if ( !auth.ValidateToken( token, options ) )
                     {
                         context.Response.StatusCode = 401;
                         await context.Response.WriteAsJsonAsync( new { error = "Unauthorized" } );
@@ -250,7 +253,7 @@ public class Program
             if ( !auth.ValidatePassword( req.Password, options ) )
                 return Results.Json( new { error = "Incorrect PIN or password." }, statusCode: 401 );
 
-            return Results.Ok( new { token = auth.IssueToken() } );
+            return Results.Ok( new { token = auth.IssueToken( options ) } );
         } ).RequireRateLimiting( "login" );  // brute-force protection
 
         // Revokes the caller's bearer token.

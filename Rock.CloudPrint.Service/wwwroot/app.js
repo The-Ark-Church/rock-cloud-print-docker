@@ -15,17 +15,33 @@ async function authFetch( url, opts = {} ) {
     if ( authToken ) headers['Authorization'] = 'Bearer ' + authToken;
     const resp = await fetch( url, { ...opts, headers } );
     if ( resp.status === 401 ) {
+        // A token the server no longer accepts means the session ended
+        // under us - it sat idle past the server's limit, the proxy
+        // restarted, or the PIN was changed elsewhere. Say so, rather than
+        // leaving someone who was mid-task wondering why they were asked
+        // for the PIN again.
+        const hadToken = !!authToken;
         authToken = '';
         sessionStorage.removeItem( 'rock-cp-token' );
-        showLoginOverlay();
+        showLoginOverlay( hadToken ? 'Your session has ended. Please log in again.' : '' );
         throw new Error( 'Unauthorized' );
     }
     return resp;
 }
 
-function showLoginOverlay() {
-    document.getElementById( 'login-overlay' ).classList.remove( 'hidden' );
-    document.getElementById( 'login-error' ).classList.add( 'hidden' );
+function showLoginOverlay( message ) {
+    const overlay = document.getElementById( 'login-overlay' );
+    const errEl   = document.getElementById( 'login-error' );
+
+    // The status poll keeps running behind the overlay and lands here on
+    // every 401. Only the first call resets the form; later ones would
+    // wipe the PIN out from under somebody typing it, and the message
+    // saying why they are here.
+    if ( !overlay.classList.contains( 'hidden' ) ) return;
+
+    overlay.classList.remove( 'hidden' );
+    errEl.textContent = message || '';
+    errEl.classList.toggle( 'hidden', !message );
     document.getElementById( 'login-pin' ).value = '';
     setTimeout( () => document.getElementById( 'login-pin' ).focus(), 50 );
 }

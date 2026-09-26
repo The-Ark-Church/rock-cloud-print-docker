@@ -140,7 +140,7 @@ environment:
 
 The web UI is open by default. **Set a PIN.** Anyone who can reach port 8080 can change every setting, and can upload a label and print it to any address they choose — which means the port offers a way to send arbitrary bytes to any host and port on your network. That is inherent to what a print proxy does, but it makes the PIN worth setting even on a network you trust.
 
-Set it via **Settings → Security → Set PIN**, or with `- Password=mypin` in the `docker-compose.yml` environment block. Tokens are in-memory only, so users log in again after a restart.
+Set it via **Settings → Security → Set PIN**, or with `- Password=mypin` in the `docker-compose.yml` environment block. Tokens are in-memory only, so users log in again after a restart. A login also lapses after 8 hours unused and after 24 hours regardless; change those with `SessionIdleMinutes` and `SessionMaxHours` (`0` switches either off).
 
 ---
 

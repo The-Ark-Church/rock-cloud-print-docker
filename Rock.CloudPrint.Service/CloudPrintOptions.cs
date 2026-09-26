@@ -48,6 +48,22 @@ internal class CloudPrintOptions
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
+    /// How long a web UI login may go unused before it lapses and the PIN is
+    /// asked for again. An open page checks the proxy's status every couple
+    /// of seconds, which counts as use, so in practice this is how long a
+    /// token stays good after the page that held it was closed. Set to zero
+    /// to never expire an idle session.
+    /// </summary>
+    public int SessionIdleMinutes { get; set; } = 480;
+
+    /// <summary>
+    /// How long a web UI login lasts however much it is used. This is what
+    /// eventually ends the session of a dashboard left open on a screen,
+    /// which the idle limit never would. Set to zero for no limit.
+    /// </summary>
+    public int SessionMaxHours { get; set; } = 24;
+
+    /// <summary>
     /// How long a print attempt may take before it is assumed the Rock server
     /// stopped waiting for it. Rock's check-in kiosk allows five seconds for the
     /// whole print operation and then shows the operator its own generic timeout
