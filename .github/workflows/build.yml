@@ -12,6 +12,23 @@ permissions:
   contents: read
 
 jobs:
+  # The unit tests, run in the same SDK image the Dockerfile builds with, so a
+  # test passing here means it passed on the toolchain that ships. The image
+  # build below does not compile the test project at all, so without this job
+  # a broken test would go unnoticed.
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/dotnet/sdk:10.0
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - run: dotnet test Rock.CloudPrint.Tests --logger "console;verbosity=normal"
+
   build:
     name: Build (no publish)
     runs-on: ubuntu-latest
