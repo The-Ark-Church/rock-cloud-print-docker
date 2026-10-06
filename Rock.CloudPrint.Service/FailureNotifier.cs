@@ -60,10 +60,10 @@ internal class NotificationAttempt
 /// <summary>
 /// Reports print problems to the Rock server so somebody can be told.
 ///
-/// Two rules this must never break. It must not block the print path: prints are
-/// handled inline on the socket's receive loop, so anything slow here stops the
-/// proxy answering the server at all - every send is dispatched to a background
-/// task and never awaited. And it must not claim a success it did not have,
+/// Two rules this must never break. It must not block the print path: it is
+/// called before the next label queued for that printer can start, so anything
+/// slow here delays it - every send is dispatched to a background task and
+/// never awaited. And it must not claim a success it did not have,
 /// because a notification nobody receives is worse than none at all.
 /// </summary>
 internal class FailureNotifier
