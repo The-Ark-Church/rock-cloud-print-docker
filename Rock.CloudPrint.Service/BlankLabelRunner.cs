@@ -195,6 +195,20 @@ internal sealed class BlankLabelRunner
     }
 
     /// <summary>
+    /// Called once a sequential run has worked out its codes and before it
+    /// reserves them. Null outside tests.
+    ///
+    /// <para>
+    /// It exists so a test can start a second run at exactly the moment the
+    /// first has its codes but has not yet reserved them, which is when two
+    /// runs could once be handed the same codes. Timing that from outside -
+    /// a large run and a short sleep - only catches it some of the time, and a
+    /// test that only sometimes fails would let the bug back in quietly.
+    /// </para>
+    /// </summary>
+    internal Action? AfterSequentialCodesWorkedOut { get; set; }
+
+    /// <summary>
     /// Validates a request, reserves its codes, and starts sending.
     ///
     /// <para>
@@ -261,7 +275,7 @@ internal sealed class BlankLabelRunner
         }
 
         var sequential = string.Equals( request.Mode, "sequential", StringComparison.OrdinalIgnoreCase );
-        IReadOnlyList<string> codes;
+        IReadOnlyList<string> codes = Array.Empty<string>();
         string? reservedThrough = null;
         string? nextStart = null;
 
@@ -279,27 +293,7 @@ internal sealed class BlankLabelRunner
                 request.Prefix + new string( TestCharacter, Math.Clamp( testLength, 1, SecurityCode.MaxLength ) )
             };
         }
-        else if ( sequential )
-        {
-            var start = string.IsNullOrWhiteSpace( request.Start )
-                ? _state.Current.SequentialNext
-                : request.Start.Trim();
-
-            if ( !SecurityCode.IsUsableStart( start ) )
-            {
-                return (BlankRunStartOutcome.NoSequentialStart, null, null);
-            }
-
-            codes = SecurityCode.Sequential( start!, quantity, request.Prefix );
-
-            // Recorded without the prefix, so it stays comparable with a start
-            // typed later and with whatever was reserved before.
-            var bare = SecurityCode.Sequential( start!, quantity );
-
-            reservedThrough = Highest( _state.Current.SequentialReservedThrough, bare[^1] );
-            nextStart = SecurityCode.Sequential( start!, quantity + 1 )[^1];
-        }
-        else
+        else if ( !sequential )
         {
             if ( request.CodeLength < 1 || request.CodeLength > SecurityCode.MaxLength )
             {
@@ -317,6 +311,36 @@ internal sealed class BlankLabelRunner
 
         lock ( _gate )
         {
+            if ( sequential && !request.IsTestCopy )
+            {
+                // Read, worked out and reserved under one lock. Done outside
+                // it, a second run could read the same starting point while
+                // the first was still working out its codes - and if the first
+                // reserved, printed and finished in that time, the second
+                // would find nothing running and print the same codes again.
+                // Holding the lock for this costs at most MaxQuantity short
+                // strings, a millisecond or two.
+                var start = string.IsNullOrWhiteSpace( request.Start )
+                    ? _state.Current.SequentialNext
+                    : request.Start.Trim();
+
+                if ( !SecurityCode.IsUsableStart( start ) )
+                {
+                    return (BlankRunStartOutcome.NoSequentialStart, null, null);
+                }
+
+                codes = SecurityCode.Sequential( start!, quantity, request.Prefix );
+
+                // Recorded without the prefix, so it stays comparable with a
+                // start typed later and with whatever was reserved before.
+                var bare = SecurityCode.Sequential( start!, quantity );
+
+                reservedThrough = Highest( _state.Current.SequentialReservedThrough, bare[^1] );
+                nextStart = SecurityCode.Sequential( start!, quantity + 1 )[^1];
+
+                AfterSequentialCodesWorkedOut?.Invoke();
+            }
+
             if ( _run is { IsFinished: false } )
             {
                 return (BlankRunStartOutcome.AlreadyRunning, _run.Snapshot(), null);
