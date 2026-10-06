@@ -189,7 +189,8 @@ Always on:
 | Layer | What it does |
 |---|---|
 | **Login rate limit** | `/api/auth/login` is capped at 5 attempts per minute; excess returns HTTP 429 |
-| **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` restricting script/style/image sources |
+| **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` that allows scripts, styles and images from the proxy itself only. There is no `'unsafe-inline'`: the UI's JavaScript is in `app.js` and `theme.js` rather than the page, so injected inline script or `onclick=` attributes would not run |
+| **Session expiry** | A login lapses after `SessionIdleMinutes` unused (default 8 hours) and, however much it is used, after `SessionMaxHours` (default 24) |
 | **Server header suppression** | `Server: Kestrel` is disabled, so the stack is not advertised |
 | **Non-root runtime** | Runs as `appuser` (UID 1000), chosen to match the typical host volume owner so `./config` stays writable without privilege escalation |
 | **Bearer tokens in `sessionStorage`** | Cleared when the tab closes, rather than `localStorage` |
@@ -209,6 +210,21 @@ Always on:
 | PIN set via env var | Login required; PIN cannot be changed in the web UI |
 | Container restarts | In-memory sessions cleared — users log in again |
 | PIN changed | All active sessions invalidated immediately |
+| Session unused for `SessionIdleMinutes` | That session ends; the login screen says so |
+| Session older than `SessionMaxHours` | That session ends, even on a page left open |
+
+**Session length.** Two settings, set like any other — an environment variable or a key in `config/appsettings.json`:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `SessionIdleMinutes` | `480` (8 hours) | How long a login may go unused before the PIN is asked for again. An open page checks the proxy's status every couple of seconds, which counts as use, so in practice this is how long a login outlives the tab that held it. `0` never expires an idle session |
+| `SessionMaxHours` | `24` | How long a login lasts however much it is used — what eventually ends the session of a dashboard left open on a screen. `0` for no limit |
+
+```yaml
+environment:
+  - SessionIdleMinutes=60
+  - SessionMaxHours=12
+```
 
 ---
 
@@ -702,7 +718,7 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 |---|---|
 | `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; targets .NET 10 rather than .NET 8, whose support ends in November 2026; removed Windows runtime identifier, single-file publish, and Windows-only packages |
 | `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware; added the unauthenticated `/healthz` endpoint and the `--healthcheck` probe mode |
-| `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection and `SlowPrintMilliseconds` for the slow-print threshold |
+| `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection, `SlowPrintMilliseconds` for the slow-print threshold, and `SessionIdleMinutes` and `SessionMaxHours` for how long a login lasts |
 | `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, each attempt is timed and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
 | `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection, and gives it its own `ILogger<ProxyClientWebSocket>` so print activity is attributed separately from worker activity; marks the proxy disconnected when it is stopped for a settings change, which upstream left reported as connected |
 | `Rock.CloudPrint.Service/PrintMetrics.cs` | New — records the outcome of each print attempt: labels printed, labels failed, prints that outran the server, and the reason for the most recent failure |
@@ -711,16 +727,16 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/FailureNotifier.cs` | New — reports print failures to a Rock webhook, with per-printer debouncing, and remembers the last attempt so the dashboard can name the fault |
 | `Rock.CloudPrint.Service/ProxyHealth.cs` | New — decides what `/healthz` reports, and where the `--healthcheck` probe finds it |
 | `Rock.CloudPrint.Service/ProxyStatus.cs` | Records when the connection was lost, so the health check can allow a grace period |
-| `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication |
+| `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication. Tokens lapse when idle or too old, lapsed ones are pruned, and the PIN is compared in constant time |
 | `Rock.CloudPrint.Service/SettingsFile.cs` | New — saves the web UI's settings to `config/appsettings.json` one change at a time and with an atomic write, so two saves cannot undo each other and a power cut cannot leave a file the proxy fails to start with |
 | `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only, cleared on restart. Entries carry a sequence number so the UI fetches only what is new |
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` capturing `Rock.CloudPrint.*` entries only |
 | `Rock.CloudPrint.Service/LabelStore.cs`, `ZplTemplate.cs`, `SecurityCode.cs`, `BlankLabelRunner.cs`, `BlankLabelState.cs`, `LabelCapture.cs`, `LabelPreview.cs`, `PrinterBook.cs`, `PrinterSocket.cs`, `AtomicFile.cs` | New — blank label printing: template storage, code generation and substitution, run execution, the record of used codes, capture, preview, and saved printers |
 | `Rock.CloudPrint.Service/appsettings.json` | Removed EventLog config; added `Urls: http://+:8080` and default empty keys |
-| `Rock.CloudPrint.Service/wwwroot/index.html` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications and Security panels. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css` |
+| `Rock.CloudPrint.Service/wwwroot/index.html`, `app.js`, `theme.js` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications and Security panels. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css`. The script lives in `app.js`, plus a small `theme.js` in `<head>` that applies dark mode before the first paint, and buttons are wired with `addEventListener` — no inline script or handlers, so the CSP needs no `'unsafe-inline'` |
 | `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Targets `net10.0` alongside `net472`; `System.Text.Json` is referenced only for `net472`, bumped from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) — .NET 10 includes its own |
 | `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
-| `Dockerfile` | New — multi-stage Linux build on the .NET 10 (Ubuntu 24.04) images, running as `appuser` on UID 1000; installs `iputils-ping` and `iproute2` for in-container diagnostics; a `HEALTHCHECK` that runs the service itself with `--healthcheck`; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
+| `Dockerfile` | New — multi-stage Linux build on the .NET 10 (Ubuntu 24.04) images, running as `appuser` on UID 1000; installs `iputils-ping` and `iproute2` for in-container diagnostics; a `HEALTHCHECK` that runs the service itself with `--healthcheck`; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html` and `app.js`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file, in the host `config/` directory mounted into the container |
 
