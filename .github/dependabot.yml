@@ -1,0 +1,143 @@
+# Dependabot version updates.
+#
+# Every ecosystem runs once a week, on Monday morning US Eastern time. That puts
+# an update at the start of the week, with days to review, merge and release it,
+# rather than landing just before a Sunday when nobody wants to change what
+# check-in runs on.
+#
+# Minor and patch updates are grouped, so each ecosystem opens at most one of
+# those pull requests a week. A major update that is not ignored below still
+# arrives on its own, because a major is worth reading by itself.
+#
+# No commit-message prefix is set. Dependabot's default ("Bump x from 1.0 to
+# 1.1") is already the plain-English imperative this repo uses, and a
+# conventional-commit prefix would be the only one in the history.
+#
+# This file does nothing until it is on the default branch of the upstream
+# repository, and version updates may also need enabling in the repository's
+# settings under Code security.
+version: 2
+
+updates:
+  # This is the main reason this file exists. Every action in the workflows is
+  # pinned to a full commit SHA with a trailing "# vX.Y.Z" comment, so a
+  # retagged or compromised action cannot change what runs. That is only safe
+  # if the pins are kept current, and doing it by hand means looking up a SHA
+  # and editing a comment for every action. Dependabot moves the SHA and
+  # rewrites the version comment together, so the two cannot disagree.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # The Dockerfile's base images: node for the stylesheet stage, and the .NET
+  # SDK and ASP.NET runtime images.
+  #
+  # Dependabot names these images without their registry, so the .NET images
+  # are dotnet/sdk and dotnet/aspnet here even though they come from
+  # mcr.microsoft.com.
+  #
+  # Both are on floating tags (a major.minor for .NET, a major for Node), and
+  # Dependabot keeps a tag at the precision it already has. Patched base images
+  # therefore arrive through the floating tag on the next build, not through a
+  # pull request here. What this entry proposes is a change of tag, and every
+  # change of tag available is a major version, which is exactly what is
+  # ignored below. It is kept so the images are tracked, and so it starts
+  # proposing updates if the tags are ever pinned to a digest.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    groups:
+      base-images:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # A .NET major is not a tag change. The TargetFramework in every csproj has
+      # to move with it, and the SDK and runtime images have to move together,
+      # so a pull request bumping one image alone would at best fail the build.
+      # Moving to a new .NET is a deliberate decision, made by hand.
+      - dependency-name: "dotnet/*"
+        update-types: ["version-update:semver-major"]
+      # Node only compiles the stylesheet, so a major is low risk. It is ignored
+      # anyway because Dependabot does not know which Node majors are LTS: it
+      # would propose each odd-numbered release, which is supported for months
+      # rather than years. Moving to the next LTS is done by hand, at the same
+      # time as a .NET move where it can be.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  # The .NET projects. There is no solution file, and without one Dependabot
+  # only looks for project files at the top level of each directory it is given,
+  # not beneath it. Listing "/" would find nothing, so each project is named.
+  - package-ecosystem: nuget
+    directories:
+      - /Rock.CloudPrint.Service
+      - /Rock.CloudPrint.Shared
+      - /Rock.CloudPrint.Tests
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    # Only the test tools are grouped. The runtime packages - Polly.Core, which
+    # drives the reconnect to Rock, and the Microsoft.Extensions and
+    # System.Text.Json packages - change what runs on the print path, so each
+    # arrives in a pull request of its own to be read and tested by itself
+    # rather than bundled with a test SDK bump. The test tools only affect the
+    # unit tests, which the unit-test check runs, so their majors are grouped
+    # in too.
+    groups:
+      test-tools:
+        patterns: ["Microsoft.NET.Test.Sdk", "xunit", "xunit.*"]
+        update-types: [major, minor, patch]
+    ignore:
+      # Polly.Core builds the retry pipeline that reconnects the proxy to Rock.
+      # A major can change retry and timeout behaviour, which is exactly what
+      # has caused a rollback here before, so it is taken by hand, with a test
+      # on a real proxy, not from a weekly pull request.
+      - dependency-name: Polly.Core
+        update-types: ["version-update:semver-major"]
+      # Rock.CloudPrint.Shared also builds for net472, and its Microsoft.Extensions
+      # and System.Text.Json versions are deliberately kept at ones chosen for
+      # that build. Their major versions track .NET's, so a major here is part of
+      # a .NET move, decided alongside the TargetFramework change, not an update
+      # to take on its own. Minor and patch updates within a major still come
+      # through as normal.
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: System.Text.Json
+        update-types: ["version-update:semver-major"]
+
+  # The Tailwind build that produces the web UI's stylesheet.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # Tailwind 4 is a rewrite, not an upgrade: it has a different config format
+      # and a different CLI, and build/tailwind.config.js is written for 3. Moving
+      # to it means rewriting the build, so Dependabot is kept on 3.x.
+      - dependency-name: tailwindcss
+        versions: [">= 4.0.0"]
