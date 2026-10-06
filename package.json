@@ -7,6 +7,6 @@
     "css": "tailwindcss -c build/tailwind.config.js -i build/src/app.css -o Rock.CloudPrint.Service/wwwroot/app.css --minify"
   },
   "devDependencies": {
-    "tailwindcss": "3.4.17"
+    "tailwindcss": "3.4.19"
   }
 }
