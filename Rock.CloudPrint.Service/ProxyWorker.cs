@@ -158,8 +158,10 @@ class ProxyWorker : BackgroundService
             return;
         }
 
-        var ws = await ConnectAsync( cancellationToken );
-        var options = _optionsMonitor.CurrentValue;
+        // The settings the connection was actually made with, not a second
+        // read of the current ones. A save that lands while a connect is in
+        // flight would otherwise be recorded as connected without being used.
+        var (ws, options) = await ConnectAsync( cancellationToken );
         var proxy = new ProxyClientWebSocket( ws, _proxyLogger, _status, _metrics, options.SlowPrintMilliseconds, _notifier );
 
         _socket = ws;
@@ -180,6 +182,18 @@ class ProxyWorker : BackgroundService
             {
                 _ = await Task.Factory.StartNew( () => proxy.RunAsync( cancellationToken ), cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default );
                 _proxy = proxy;
+
+                // A change saved while connecting reached OnConfigurationChanged
+                // when there was no proxy to restart, so nothing acted on it.
+                // Act on it now: reconnect once with what is saved.
+                var current = _optionsMonitor.CurrentValue;
+
+                if ( current.Url != options.Url || current.Id != options.Id || current.Name != options.Name )
+                {
+                    _logger.LogInformation( "Connection settings changed while connecting, restarting proxy." );
+
+                    _ = Task.Run( () => AttemptStopProxyAsync() );
+                }
             }
             else
             {
@@ -237,8 +251,8 @@ class ProxyWorker : BackgroundService
     /// cancelled if the initial connect fails.
     /// </summary>
     /// <param name="cancellationToken">A token that can be used to signal that the connect should be aborted.</param>
-    /// <returns>An instance of <see cref="ClientWebSocket"/> that has been connected.</returns>
-    private async Task<ClientWebSocket> ConnectAsync( CancellationToken cancellationToken )
+    /// <returns>The connected <see cref="ClientWebSocket"/>, and the settings it was connected with.</returns>
+    private async Task<(ClientWebSocket Socket, CloudPrintOptions Options)> ConnectAsync( CancellationToken cancellationToken )
     {
         var pipeline = new ResiliencePipelineBuilder()
             .AddRetry( new RetryStrategyOptions
@@ -259,8 +273,8 @@ class ProxyWorker : BackgroundService
     /// An exception will be thrown if the connect failed.
     /// </summary>
     /// <param name="cancellationToken">A token that can be used to signal that the connect should be aborted.</param>
-    /// <returns>An instance of <see cref="ClientWebSocket"/> in a connected state.</returns>
-    private async ValueTask<ClientWebSocket> ConnectOnceAsync( CancellationToken cancellationToken )
+    /// <returns>The connected <see cref="ClientWebSocket"/>, and the settings it was connected with.</returns>
+    private async ValueTask<(ClientWebSocket Socket, CloudPrintOptions Options)> ConnectOnceAsync( CancellationToken cancellationToken )
     {
         try
         {
@@ -306,12 +320,17 @@ class ProxyWorker : BackgroundService
             catch ( Exception ex )
             {
                 _logger.LogError( ex, "Unable to connect to server {server}.", baseUrl );
+
+                // Retried every few seconds while Rock is unreachable, so an
+                // attempt that failed must not leave its socket behind.
+                ws.Dispose();
+
                 throw;
             }
 
             _logger.LogInformation( "Established connection to server {server}.", baseUrl );
 
-            return ws;
+            return (ws, options);
         }
         catch ( Exception ex )
         {
