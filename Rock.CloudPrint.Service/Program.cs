@@ -15,8 +15,6 @@
 // </copyright>
 //
 using System.Reflection;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -79,6 +77,7 @@ public class Program
         builder.Services.AddHttpClient( "labelary" );
         builder.Services.AddSingleton<LabelPreview>();
         builder.Services.AddSingleton<AuthService>();
+        builder.Services.AddSingleton<SettingsFile>();
 
         // Redirects are NOT followed: a URL matching no webhook in Rock redirects
         // to Rock's own 404 page, which answers 200 - so a following client would
@@ -322,40 +321,21 @@ public class Program
                 id   = config["Id"]   ?? string.Empty
             } ) );
 
-        app.MapPost( "/api/settings", async ( SettingsRequest settings, IConfiguration config, IWebHostEnvironment env ) =>
+        app.MapPost( "/api/settings", async ( SettingsRequest settings, SettingsFile settingsFile, CancellationToken cancellationToken ) =>
         {
-            var settingsPath = Path.Combine( env.ContentRootPath, "config", "appsettings.json" );
-            Directory.CreateDirectory( Path.GetDirectoryName( settingsPath )! );
-
-            JsonNode json;
-
-            if ( File.Exists( settingsPath ) )
+            var saved = await settingsFile.UpdateAsync( json =>
             {
-                await using var stream = File.OpenRead( settingsPath );
-                json = await JsonNode.ParseAsync( stream ) ?? new JsonObject();
-            }
-            else
-            {
-                json = new JsonObject();
-            }
+                json["Url"]  = settings.Url;
+                json["Name"] = settings.Name;
+                json["Id"]   = settings.Id;
+            }, cancellationToken );
 
-            json["Url"]  = settings.Url;
-            json["Name"] = settings.Name;
-            json["Id"]   = settings.Id;
-
-            await File.WriteAllTextAsync( settingsPath, json.ToJsonString( new JsonSerializerOptions { WriteIndented = true } ) );
-
-            if ( config is IConfigurationRoot root )
-            {
-                root.Reload();
-            }
-
-            return Results.Ok( new { success = true } );
+            return saved ? Results.Ok( new { success = true } ) : SettingsFileUnreadable();
         } );
 
         // Sets, changes, or removes the PIN. Requires the correct current PIN when
         // one is already configured. Sending an empty newPassword removes protection.
-        app.MapPost( "/api/settings/security", async ( SecurityRequest req, IOptionsMonitor<CloudPrintOptions> options, IConfiguration config, IWebHostEnvironment env, AuthService auth ) =>
+        app.MapPost( "/api/settings/security", async ( SecurityRequest req, IOptionsMonitor<CloudPrintOptions> options, SettingsFile settingsFile, AuthService auth, CancellationToken cancellationToken ) =>
         {
             // If the password is supplied via environment variable the web UI
             // cannot override it — direct the user to docker-compose.yml instead.
@@ -371,31 +351,18 @@ public class Program
                     return Results.Json( new { error = "Current PIN is incorrect." }, statusCode: 400 );
             }
 
-            var settingsPath = Path.Combine( env.ContentRootPath, "config", "appsettings.json" );
-            Directory.CreateDirectory( Path.GetDirectoryName( settingsPath )! );
-
-            JsonNode json;
-            if ( File.Exists( settingsPath ) )
+            var saved = await settingsFile.UpdateAsync( json =>
             {
-                await using var stream = File.OpenRead( settingsPath );
-                json = await JsonNode.ParseAsync( stream ) ?? new JsonObject();
-            }
-            else
-            {
-                json = new JsonObject();
-            }
+                // Store the PIN as plain text. This service runs on a local trusted
+                // network; the overhead of hashing is not warranted here.
+                if ( string.IsNullOrWhiteSpace( req.NewPassword ) )
+                    json.Remove( "Password" );
+                else
+                    json["Password"] = req.NewPassword;
+            }, cancellationToken );
 
-            // Store the PIN as plain text. This service runs on a local trusted
-            // network; the overhead of hashing is not warranted here.
-            if ( string.IsNullOrWhiteSpace( req.NewPassword ) )
-                json.AsObject().Remove( "Password" );
-            else
-                json["Password"] = req.NewPassword;
-
-            await File.WriteAllTextAsync( settingsPath, json.ToJsonString( new JsonSerializerOptions { WriteIndented = true } ) );
-
-            if ( config is IConfigurationRoot root )
-                root.Reload();
+            if ( !saved )
+                return SettingsFileUnreadable();
 
             // Invalidate all existing sessions so they must re-authenticate.
             auth.RevokeAll();
@@ -501,7 +468,7 @@ public class Program
         // Saves the notification settings. Sending null for the secret leaves the
         // stored one alone, so the UI can save the other fields without having to
         // round-trip a value it is never given.
-        app.MapPost( "/api/settings/notifications", async ( NotificationSettingsRequest request, IConfiguration config, IWebHostEnvironment env ) =>
+        app.MapPost( "/api/settings/notifications", async ( NotificationSettingsRequest request, SettingsFile settingsFile, CancellationToken cancellationToken ) =>
         {
             var url = ( request.Url ?? string.Empty ).Trim();
 
@@ -516,39 +483,22 @@ public class Program
             if ( url.Length > 0 && !url.StartsWith( "https://", StringComparison.OrdinalIgnoreCase ) )
                 return Results.Json( new { error = "The webhook URL must start with https:// - the secret is sent in a request header." }, statusCode: 400 );
 
-            var settingsPath = Path.Combine( env.ContentRootPath, "config", "appsettings.json" );
-            Directory.CreateDirectory( Path.GetDirectoryName( settingsPath )! );
-
-            JsonNode json;
-
-            if ( File.Exists( settingsPath ) )
+            var saved = await settingsFile.UpdateAsync( json =>
             {
-                await using var stream = File.OpenRead( settingsPath );
-                json = await JsonNode.ParseAsync( stream ) ?? new JsonObject();
-            }
-            else
-            {
-                json = new JsonObject();
-            }
+                json["NotificationsEnabled"] = request.Enabled;
+                json["NotificationUrl"] = url;
+                json["NotificationCooldownMinutes"] = Math.Clamp( request.CooldownMinutes ?? 5, 0, 1440 );
 
-            json["NotificationsEnabled"] = request.Enabled;
-            json["NotificationUrl"] = url;
-            json["NotificationCooldownMinutes"] = Math.Clamp( request.CooldownMinutes ?? 5, 0, 1440 );
+                if ( request.Secret != null )
+                {
+                    if ( string.IsNullOrWhiteSpace( request.Secret ) )
+                        json.Remove( "NotificationSecret" );
+                    else
+                        json["NotificationSecret"] = request.Secret;
+                }
+            }, cancellationToken );
 
-            if ( request.Secret != null )
-            {
-                if ( string.IsNullOrWhiteSpace( request.Secret ) )
-                    json.AsObject().Remove( "NotificationSecret" );
-                else
-                    json["NotificationSecret"] = request.Secret;
-            }
-
-            await File.WriteAllTextAsync( settingsPath, json.ToJsonString( new JsonSerializerOptions { WriteIndented = true } ) );
-
-            if ( config is IConfigurationRoot root )
-                root.Reload();
-
-            return Results.Ok( new { success = true } );
+            return saved ? Results.Ok( new { success = true } ) : SettingsFileUnreadable();
         } );
 
         // Sends a real notification so the whole chain can be proved at
@@ -946,6 +896,14 @@ public class Program
 
         app.Run();
     }
+
+    /// <summary>
+    /// The answer when a save is refused because the settings file already on
+    /// disk cannot be parsed. Nothing was changed, and the file needs a person.
+    /// </summary>
+    private static IResult SettingsFileUnreadable() => Results.Json(
+        new { error = "The settings file config/appsettings.json could not be read, so nothing was saved. Check it is valid JSON, or remove it to start again." },
+        statusCode: 500 );
 
     /// <summary>
     /// The version this build was published with. Supplied by the Docker build

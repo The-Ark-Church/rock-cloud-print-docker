@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net472</TargetFrameworks>
+    <TargetFrameworks>net10.0;net472</TargetFrameworks>
     <Nullable Condition="$(TargetFramework) != 'net472'">enable</Nullable>
   </PropertyGroup>
 
@@ -13,6 +13,14 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+  </ItemGroup>
+
+  <!--
+    System.Text.Json is part of .NET itself, so only the .NET Framework build
+    needs the package. On net10.0 the SDK would prune the reference anyway and
+    warn (NU1510) that it is unnecessary.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
   
