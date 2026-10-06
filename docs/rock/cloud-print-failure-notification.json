@@ -4929,7 +4929,7 @@
       "GenerateNewGuid": true,
       "Properties": {
         "IsSystem": false,
-        "Value": "no-reply@thearkchurch.com",
+        "Value": "no-reply@example.com",
         "PersistedTextValue": "Attribute not supported",
         "PersistedHtmlValue": "Attribute not supported",
         "PersistedCondensedTextValue": "Attribute not supported",

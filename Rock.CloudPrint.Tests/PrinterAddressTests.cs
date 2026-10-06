@@ -22,23 +22,23 @@ public class PrinterAddressTests
     [Fact]
     public void Parse_WithoutPort_UsesTheRawPrintingDefault()
     {
-        var address = PrinterAddress.Parse( "10.0.0.5" );
+        var address = PrinterAddress.Parse( "192.0.2.5" );
 
-        Assert.Equal( IPAddress.Parse( "10.0.0.5" ), address.Address );
+        Assert.Equal( IPAddress.Parse( "192.0.2.5" ), address.Address );
         Assert.Equal( 9100, address.Port );
     }
 
     [Theory]
-    [InlineData( "10.0.0.5:9100", 9100 )]
-    [InlineData( "10.0.0.5:1234", 1234 )]
+    [InlineData( "192.0.2.5:9100", 9100 )]
+    [InlineData( "192.0.2.5:1234", 1234 )]
     public void Parse_WithPort_UsesIt( string input, int expectedPort )
     {
         Assert.Equal( expectedPort, PrinterAddress.Parse( input ).Port );
     }
 
     [Theory]
-    [InlineData( "10.0.0.5:" )]
-    [InlineData( "10.0.0.5:abc" )]
+    [InlineData( "192.0.2.5:" )]
+    [InlineData( "192.0.2.5:abc" )]
     public void Parse_WithAnUnusablePort_FallsBackToTheDefault( string input )
     {
         // Upstream behaviour. A typo in the port silently prints to 9100
@@ -52,7 +52,7 @@ public class PrinterAddressTests
     {
         // The original string is what gets logged and reported back, so it
         // must not be normalised on the way through.
-        Assert.Equal( "10.0.0.5:1234", PrinterAddress.Parse( "10.0.0.5:1234" ).Original );
+        Assert.Equal( "192.0.2.5:1234", PrinterAddress.Parse( "192.0.2.5:1234" ).Original );
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class PrinterAddressTests
         // Deliberate, and documented in PrinterAddress: validation happens
         // when the endpoint is built, which is where it happened before the
         // parsing was lifted out of the print path.
-        var address = PrinterAddress.Parse( "10.0.0.5:99999" );
+        var address = PrinterAddress.Parse( "192.0.2.5:99999" );
 
         Assert.Equal( 99999, address.Port );
         Assert.Throws<ArgumentOutOfRangeException>( () => address.ToEndPoint() );
