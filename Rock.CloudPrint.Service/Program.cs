@@ -105,19 +105,59 @@ public class Program
 
         builder.Services.AddHostedService<ProxyWorker>();
 
-        // Rate limit /api/auth/login to 5 attempts per minute per source.
-        // Excess attempts return HTTP 429 with no queue, blocking PIN brute-force
-        // attacks against the web UI without affecting normal interactive logins.
+        // Every limit below except Labelary's is counted per client address,
+        // so one person's wrong PINs or test presses cannot use up somebody
+        // else's allowance. RateLimitKeys explains where the address comes
+        // from, and TrustedProxyMiddleware how it is corrected behind a
+        // reverse proxy. None of them queue: an excess request is answered
+        // with 429 straight away.
         builder.Services.AddRateLimiter( options =>
         {
             options.RejectionStatusCode = 429;
-            options.AddFixedWindowLimiter( "login", o =>
+
+            // A JSON body the UI can show as it is, and a Retry-After header
+            // when the limiter knows how long the wait is.
+            options.OnRejected = async ( context, cancellationToken ) =>
             {
-                o.PermitLimit = 5;
-                o.Window = TimeSpan.FromMinutes( 1 );
-                o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                o.QueueLimit = 0;
+                TimeSpan? retryAfter = null;
+
+                if ( context.Lease.TryGetMetadata( MetadataName.RetryAfter, out var wait ) )
+                {
+                    retryAfter = wait;
+                    context.HttpContext.Response.Headers.RetryAfter = RateLimitRejection.RetryAfterHeader( wait );
+                }
+
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    new { error = RateLimitRejection.Message( retryAfter ) }, cancellationToken );
+            };
+
+            // Five PIN attempts a minute from any one address, which a person
+            // mistyping never reaches and a script guessing is held to. On top
+            // of that, thirty a minute across every address together, so that
+            // somebody with many addresses - an IPv6 host can have as many as
+            // it likes - still cannot guess quickly. A client's own limit is
+            // checked first, so one address hammering away is turned back
+            // before it touches the shared thirty and cannot lock anybody else
+            // out; that takes at least six addresses working at once.
+            var loginCeiling = new FixedWindowRateLimiter( new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes( 1 ),
+                QueueLimit = 0,
+                AutoReplenishment = true
             } );
+
+            options.AddPolicy( "login", httpContext => RateLimitPartition.Get(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new ClientThenSharedLimiter(
+                    new FixedWindowRateLimiter( new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes( 1 ),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    } ),
+                    loginCeiling ) ) );
 
             // The printer test opens a TCP connection to whatever address it is
             // given. That is not a capability an authenticated user lacks - they
@@ -125,18 +165,47 @@ public class Program
             // but it is a far more convenient one, so it is capped. Ten a minute
             // is generous for someone pressing a button and useless for sweeping
             // a subnet.
-            options.AddFixedWindowLimiter( "printertest", o =>
-            {
-                o.PermitLimit = 10;
-                o.Window = TimeSpan.FromMinutes( 1 );
-                o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                o.QueueLimit = 0;
-            } );
+            options.AddPolicy( "printertest", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes( 1 ),
+                    QueueLimit = 0
+                } ) );
 
-            // The preview endpoint calls a third-party service on every press.
+            // The notification test calls the Rock workflow, which messages real
+            // people. Five a minute is plenty to check a change took effect and
+            // keeps an impatient finger from filling somebody's phone.
+            options.AddPolicy( "notificationtest", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes( 1 ),
+                    QueueLimit = 0
+                } ) );
+
+            // Starting a blank-label run opens a connection to an arbitrary
+            // address, like the printer test, so it gets the same ten a minute.
+            // It has its own bucket so that testing a printer first never
+            // makes the real run come back refused, and a test copy followed
+            // by the real stack and a retry or two stays well inside it.
+            options.AddPolicy( "labelprint", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                RateLimitKeys.ForClient( httpContext ),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes( 1 ),
+                    QueueLimit = 0
+                } ) );
+
+        // The preview endpoint calls a third-party service on every press.
             // Labelary publishes a free-tier rate for exactly this, and staying
             // under it is good manners rather than a security measure - the
-            // caller is already past the PIN.
+            // caller is already past the PIN. It is deliberately one limit for
+            // the whole installation, not per client: the rate Labelary asks
+            // for applies to this proxy however many people are using it.
             options.AddFixedWindowLimiter( "labelary", o =>
             {
                 o.PermitLimit = 3;
@@ -155,6 +224,15 @@ public class Program
         // or a host folder) rather than a single file.
         builder.Configuration.AddJsonFile( "config/appsettings.json", optional: true, reloadOnChange: true );
 
+        // The reverse proxy settings, when docker-compose.yml sets them, are
+        // added again after the settings file so the environment wins over
+        // anything saved there. ReverseProxyAddress.EnvironmentOverrides says
+        // why this is needed and why it is limited to these two keys.
+        var reverseProxyOverrides = ReverseProxyAddress.EnvironmentOverrides( out var invalidTrustSwitch );
+
+        if ( reverseProxyOverrides.Count > 0 )
+            builder.Configuration.AddInMemoryCollection( reverseProxyOverrides );
+
         var app = builder.Build();
 
         // On a genuinely first run this creates config/labels and writes the
@@ -167,6 +245,20 @@ public class Program
         // security codes which cannot be read is reported in the log while
         // somebody is looking at it, not at the moment they press print.
         app.Services.GetRequiredService<BlankLabelStateStore>();
+
+        // Said once at startup, where somebody editing docker-compose.yml is
+        // looking, rather than failing every request that reads the options.
+        if ( invalidTrustSwitch is not null )
+        {
+            app.Logger.LogWarning(
+                "The {Variable} environment variable is \"{Value}\", which is not true or false, so it is treated as false.",
+                ReverseProxyAddress.TrustReverseProxyVariable, invalidTrustSwitch );
+        }
+
+        // Must come before the rate limiter: it decides which client a request
+        // is counted as when the page is reached through a reverse proxy, and
+        // leaves the address alone in every other case.
+        app.UseMiddleware<TrustedProxyMiddleware>();
 
         app.UseRateLimiter();
 
@@ -356,12 +448,15 @@ public class Program
                 }
             } ) );
 
-        app.MapGet( "/api/settings", ( IConfiguration config ) =>
+        app.MapGet( "/api/settings", ( IConfiguration config, IOptionsMonitor<CloudPrintOptions> options ) =>
             Results.Ok( new
             {
                 url  = config["Url"]  ?? string.Empty,
                 name = config["Name"] ?? string.Empty,
-                id   = config["Id"]   ?? string.Empty
+                id   = config["Id"]   ?? string.Empty,
+                trustReverseProxy = options.CurrentValue.TrustReverseProxy,
+                trustedProxy = options.CurrentValue.TrustedProxy,
+                reverseProxyFromEnvVar = ReverseProxyAddress.SetByEnvironment
             } ) );
 
         app.MapPost( "/api/settings", async ( SettingsRequest settings, SettingsFile settingsFile, CancellationToken cancellationToken ) =>
@@ -371,6 +466,57 @@ public class Program
                 json["Url"]  = settings.Url;
                 json["Name"] = settings.Name;
                 json["Id"]   = settings.Id;
+            }, cancellationToken );
+
+            return saved ? Results.Ok( new { success = true } ) : SettingsFileUnreadable();
+        } );
+
+        // Saves the reverse proxy settings. They take effect on the next
+        // request: the middleware reads them every time, and the save reloads
+        // the configuration before it answers.
+        app.MapPost( "/api/settings/reverse-proxy", async ( ReverseProxySettingsRequest request, SettingsFile settingsFile, CancellationToken cancellationToken ) =>
+        {
+            // Set in docker-compose.yml, they would win over anything saved
+            // here anyway, so saving would look like it worked and change
+            // nothing. Say so instead, as the PIN does.
+            if ( ReverseProxyAddress.SetByEnvironment )
+                return Results.Json(
+                    new { error = "The reverse proxy settings are controlled by the TrustReverseProxy and TrustedProxy environment variables and cannot be changed here. Edit docker-compose.yml and restart the container." },
+                    statusCode: 403 );
+
+            var trust = request.TrustReverseProxy ?? false;
+            var proxies = ( request.TrustedProxy ?? string.Empty ).Trim();
+
+            if ( proxies.Length > ReverseProxyAddress.MaxListLength )
+                return Results.Json( new { error = "That is too long to be a list of proxy addresses." }, statusCode: 400 );
+
+            var valid = ReverseProxyAddress.TryParseList( proxies, out var parsed, out var invalidEntry );
+
+            if ( trust )
+            {
+                if ( proxies.Length == 0 )
+                    return Results.Json( new { error = "Enter the reverse proxy's IP address." }, statusCode: 400 );
+
+                if ( invalidEntry is not null )
+                    return Results.Json( new { error = $"\"{invalidEntry}\" is not an IP address. Enter the proxy's address as this container sees it, or several separated by commas." }, statusCode: 400 );
+
+                if ( !valid )
+                    return Results.Json( new { error = $"Enter between 1 and {ReverseProxyAddress.MaxListEntries} IP addresses, separated by commas." }, statusCode: 400 );
+            }
+
+            var saved = await settingsFile.UpdateAsync( json =>
+            {
+                json["TrustReverseProxy"] = trust;
+
+                // With the setting off the address does nothing, and the
+                // field holding it is hidden, so an unfinished one is not
+                // worth refusing the save over. A valid one is kept for when
+                // the setting is turned back on; anything else is dropped
+                // rather than stored as something that would later fail.
+                if ( valid )
+                    json["TrustedProxy"] = string.Join( ", ", proxies.Split( ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries ) );
+                else
+                    json.Remove( "TrustedProxy" );
             }, cancellationToken );
 
             return saved ? Results.Ok( new { success = true } ) : SettingsFileUnreadable();
@@ -562,7 +708,7 @@ public class Program
                 outcome = attempt.Outcome,
                 detail = attempt.Detail
             } );
-        } ).RequireRateLimiting( "printertest" );
+        } ).RequireRateLimiting( "notificationtest" );
 
         // ── Blank labels ───────────────────────────────────────────────────
         // The stored ZPL templates that blank check-in labels are printed from.
@@ -807,7 +953,7 @@ public class Program
 
                 _ => Results.Json( new { error = "That run could not be started." }, statusCode: 400 )
             };
-        } ).RequireRateLimiting( "printertest" );
+        } ).RequireRateLimiting( "labelprint" );
 
         // What the UI needs on load and while polling: the run, where the
         // numbering has reached, and what went out before.
@@ -1023,6 +1169,12 @@ public class Program
 internal record SettingsRequest( string Url, string Name, string Id );
 internal record LoginRequest( string Password );
 internal record SecurityRequest( string? CurrentPassword, string? NewPassword );
+
+/// <summary>
+/// The reverse proxy settings from the web UI. Both are optional on the wire
+/// so a half-filled request is answered with a sentence, not an exception.
+/// </summary>
+internal record ReverseProxySettingsRequest( bool? TrustReverseProxy, string? TrustedProxy );
 internal record PrinterTestRequest( string? Address, string? Mode );
 
 /// <summary>

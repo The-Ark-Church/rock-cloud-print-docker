@@ -178,6 +178,29 @@ environment:
 }
 ```
 
+### Behind a reverse proxy
+
+Off by default, and if people open the web UI directly — `http://<server-ip>:8080` — leave it off; nothing needs setting.
+
+Turn it on only if the web UI is reached through a reverse proxy, such as a firewall that publishes it under a host name. The rate limits count per client address, and behind a proxy every request arrives from the proxy's address, so everybody would share one allowance: five wrong PINs from anyone would lock everyone out for a minute.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `TrustReverseProxy` | `false` | Whether to believe the `X-Forwarded-For` header on requests that come from `TrustedProxy` |
+| `TrustedProxy` | *(empty)* | The proxy's IP address as this container sees it, or several separated by commas. Required when `TrustReverseProxy` is `true` |
+
+Set them in the web UI (Settings → Reverse proxy), in `config/appsettings.json`, or as environment variables:
+
+```yaml
+environment:
+  - TrustReverseProxy=true
+  - TrustedProxy=192.0.2.1
+```
+
+Unlike the other settings, these two set by environment variables win over the settings file, and the web UI shows them without letting them be changed. Saved from the web UI or the file, a change applies to the next request without a restart.
+
+Only a request whose connection comes from `TrustedProxy` may say which client it came from, and only the last entry of its `X-Forwarded-For` header is used — the one the proxy added itself. Anything further left was written by whoever made the request. A request from any other address, or with a header that is missing or not an address, is counted by the address it actually came from, so turning this on cannot be used to dodge a limit by sending the header directly. The proxy must add the client's address to `X-Forwarded-For`; most do by default.
+
 ---
 
 ## Security
@@ -188,7 +211,7 @@ Always on:
 
 | Layer | What it does |
 |---|---|
-| **Login rate limit** | `/api/auth/login` is capped at 5 attempts per minute; excess returns HTTP 429 |
+| **Rate limits** | `/api/auth/login` allows 5 attempts a minute from each client address, and 30 a minute across all of them, so a mistyped PIN elsewhere cannot lock you out and many addresses together still cannot guess quickly. Printer tests (10 a minute), notification tests (5) and starting a blank-label run (10) each have their own per-address limit. Excess returns HTTP 429 with a message and a `Retry-After` header. The address is the connection's, not `X-Forwarded-For` — unless the web UI is reached through a reverse proxy and [`TrustReverseProxy`](#behind-a-reverse-proxy) is set |
 | **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` that allows scripts, styles and images from the proxy itself only. There is no `'unsafe-inline'`: the UI's JavaScript is in `app.js` and `theme.js` rather than the page, so injected inline script or `onclick=` attributes would not run |
 | **Session expiry** | A login lapses after `SessionIdleMinutes` unused (default 8 hours) and, however much it is used, after `SessionMaxHours` (default 24) |
 | **Server header suppression** | `Server: Kestrel` is disabled, so the stack is not advertised |
@@ -718,7 +741,7 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 |---|---|
 | `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; targets .NET 10 rather than .NET 8, whose support ends in November 2026; removed Windows runtime identifier, single-file publish, and Windows-only packages |
 | `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware; added the unauthenticated `/healthz` endpoint and the `--healthcheck` probe mode |
-| `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection, `SlowPrintMilliseconds` for the slow-print threshold, and `SessionIdleMinutes` and `SessionMaxHours` for how long a login lasts |
+| `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection, `SlowPrintMilliseconds` for the slow-print threshold, and `SessionIdleMinutes` and `SessionMaxHours` for how long a login lasts, and `TrustReverseProxy` and `TrustedProxy` for counting rate limits per client behind a reverse proxy |
 | `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, each attempt is timed and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
 | `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection, and gives it its own `ILogger<ProxyClientWebSocket>` so print activity is attributed separately from worker activity; marks the proxy disconnected when it is stopped for a settings change, which upstream left reported as connected |
 | `Rock.CloudPrint.Service/PrintMetrics.cs` | New — records the outcome of each print attempt: labels printed, labels failed, prints that outran the server, and the reason for the most recent failure |
@@ -727,6 +750,8 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/FailureNotifier.cs` | New — reports print failures to a Rock webhook, with per-printer debouncing, and remembers the last attempt so the dashboard can name the fault |
 | `Rock.CloudPrint.Service/ProxyHealth.cs` | New — decides what `/healthz` reports, and where the `--healthcheck` probe finds it |
 | `Rock.CloudPrint.Service/ProxyStatus.cs` | Records when the connection was lost, so the health check can allow a grace period |
+| `Rock.CloudPrint.Service/RateLimiting.cs` | New — per-client rate limit keys, the message a refused request is given, and the limiter that counts a login against its own client before the shared ceiling |
+| `Rock.CloudPrint.Service/ReverseProxy.cs` | New — when `TrustReverseProxy` is on, takes the client's address from `X-Forwarded-For` on requests from the configured proxy only, before the rate limiter runs |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication. Tokens lapse when idle or too old, lapsed ones are pruned, and the PIN is compared in constant time |
 | `Rock.CloudPrint.Service/SettingsFile.cs` | New — saves the web UI's settings to `config/appsettings.json` one change at a time and with an atomic write, so two saves cannot undo each other and a power cut cannot leave a file the proxy fails to start with |
 | `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only, cleared on restart. Entries carry a sequence number so the UI fetches only what is new |

@@ -29,6 +29,17 @@ async function authFetch( url, opts = {} ) {
     return resp;
 }
 
+// The server answers a rate-limited request with a JSON error that says
+// how long to wait. Falls back to the caller's wording if the body is
+// missing or is not JSON.
+async function rateLimitMessage( resp, fallback ) {
+    try {
+        const d = await resp.json();
+        if ( d && d.error ) return d.error;
+    } catch ( _ ) {}
+    return fallback;
+}
+
 function showLoginOverlay( message ) {
     const overlay = document.getElementById( 'login-overlay' );
     const errEl   = document.getElementById( 'login-error' );
@@ -61,6 +72,14 @@ async function doLogin() {
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify( { password: pin } )
         } );
+
+        if ( resp.status === 429 ) {
+            errEl.textContent = await rateLimitMessage( resp, 'Too many attempts. Wait a minute and try again.' );
+            errEl.classList.remove( 'hidden' );
+            document.getElementById( 'login-pin' ).value = '';
+            document.getElementById( 'login-pin' ).focus();
+            return;
+        }
 
         if ( resp.status === 401 ) {
             errEl.textContent = 'Incorrect PIN. Please try again.';
@@ -385,7 +404,7 @@ async function testPrinter() {
         } );
 
         if ( resp.status === 429 ) {
-            showPrinterTestResult( 'bad', 'Too many tests in a short time. Wait a moment and try again.' );
+            showPrinterTestResult( 'bad', escHtml( await rateLimitMessage( resp, 'Too many tests in a short time. Wait a moment and try again.' ) ) );
             return;
         }
 
@@ -724,7 +743,7 @@ async function sendTestNotification() {
         } );
 
         if ( resp.status === 429 ) {
-            showNotifMessage( '<div class="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-sm">Too many tests in a short time. Wait a minute and try again.</div>' );
+            showNotifMessage( '<div class="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-sm">' + escHtml( await rateLimitMessage( resp, 'Too many tests in a short time. Wait a minute and try again.' ) ) + '</div>' );
             return;
         }
 
@@ -755,6 +774,7 @@ async function loadSettings() {
         document.getElementById( 'setting-url'  ).value = d.url  || '';
         document.getElementById( 'setting-id'   ).value = d.id   || '';
         document.getElementById( 'setting-name' ).value = d.name || '';
+        renderReverseProxySettings( d );
     } catch ( _ ) {}
 }
 
@@ -782,6 +802,79 @@ async function saveSettings() {
             msg.innerHTML = '<div class="text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2 text-sm">Error: ' + escHtml( err.message ) + '</div>';
             msg.classList.remove( 'hidden' );
         }
+    }
+}
+
+// ── Settings — reverse proxy ──────────────────────────────────────
+// Off unless the page is reached through a proxy such as a firewall. When
+// docker-compose.yml sets it, it is shown but cannot be changed here, the
+// same way a PIN set with the Password variable is.
+function renderReverseProxySettings( d ) {
+    const locked  = !!d.reverseProxyFromEnvVar;
+    const box     = document.getElementById( 'proxy-enabled' );
+    const address = document.getElementById( 'proxy-address' );
+
+    box.checked      = !!d.trustReverseProxy;
+    address.value    = d.trustedProxy || '';
+    box.disabled     = locked;
+    address.readOnly = locked;
+    address.classList.toggle( 'bg-gray-50', locked );
+
+    document.getElementById( 'proxy-envvar-notice' ).classList.toggle( 'hidden', !locked );
+    document.getElementById( 'proxy-save-row'      ).classList.toggle( 'hidden', locked );
+    document.getElementById( 'proxy-message'       ).classList.add( 'hidden' );
+    updateReverseProxyField();
+}
+
+// The address only means something with the box ticked, so it is only
+// asked for then. Set by environment variables it is shown whenever there
+// is one, so what docker-compose.yml says is visible even while it is off.
+function updateReverseProxyField() {
+    const box     = document.getElementById( 'proxy-enabled' );
+    const address = document.getElementById( 'proxy-address' );
+    const show    = box.checked || ( box.disabled && !!address.value );
+    document.getElementById( 'proxy-address-field' ).classList.toggle( 'hidden', !show );
+}
+
+function showProxyMsg( type, text ) {
+    const el  = document.getElementById( 'proxy-message' );
+    const cls = type === 'error'
+        ? 'text-red-700 bg-red-50 border border-red-200'
+        : 'text-green-700 bg-green-50 border border-green-200';
+    el.innerHTML = '<div class="' + cls + ' rounded px-3 py-2 text-sm">' + escHtml( text ) + '</div>';
+    el.classList.remove( 'hidden' );
+}
+
+async function saveReverseProxySettings() {
+    const trustReverseProxy = document.getElementById( 'proxy-enabled' ).checked;
+    const trustedProxy      = document.getElementById( 'proxy-address' ).value.trim();
+
+    // The server checks this too, and checks that it is an address; this
+    // only saves a round trip for the obvious case.
+    if ( trustReverseProxy && !trustedProxy ) {
+        showProxyMsg( 'error', 'Enter the reverse proxy\'s IP address.' );
+        document.getElementById( 'proxy-address' ).focus();
+        return;
+    }
+
+    try {
+        const resp = await authFetch( '/api/settings/reverse-proxy', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify( { trustReverseProxy, trustedProxy } )
+        } );
+        const d = await resp.json().catch( () => ( {} ) );
+
+        if ( resp.ok ) {
+            showProxyMsg( 'success', trustReverseProxy
+                ? 'Saved. Requests from the proxy are now counted by the client it names.'
+                : 'Saved. Every request is counted by the address it comes from.' );
+        } else {
+            showProxyMsg( 'error', d.error || ( 'Save failed (HTTP ' + resp.status + ').' ) );
+        }
+    } catch ( err ) {
+        if ( err.message !== 'Unauthorized' )
+            showProxyMsg( 'error', 'Error: ' + err.message );
     }
 }
 
@@ -1639,7 +1732,7 @@ async function previewLabel() {
     } catch ( e ) { closePreview(); return; }
 
     if ( resp.status === 429 ) {
-        openPreview( '<p class="text-sm text-red-700">Too many previews at once. Try again in a second.</p>', '' );
+        openPreview( '<p class="text-sm text-red-700">' + escHtml( data.error || 'Too many previews at once. Try again in a second.' ) + '</p>', '' );
         return;
     }
     if ( !resp.ok ) {
@@ -1741,7 +1834,7 @@ async function startBlankRun( isTest ) {
         } );
         const data = await resp.json();
 
-        if ( resp.status === 429 ) { showBlankMessage( 'bad', 'Too many runs started at once. Wait a moment.' ); return; }
+        if ( resp.status === 429 ) { showBlankMessage( 'bad', escHtml( data.error || 'Too many runs started at once. Wait a moment.' ) ); return; }
         if ( resp.status === 409 ) { showBlankMessage( 'bad', 'A run is already going. Wait for it to finish, or cancel it.' ); refreshRun(); return; }
         if ( !resp.ok ) { showBlankMessage( 'bad', escHtml( data.error || 'That run could not be started.' ) ); return; }
 
@@ -1936,6 +2029,7 @@ const clickActions = {
     cancelBlankRun:           () => cancelBlankRun(),
     saveSettings:             () => saveSettings(),
     saveNotificationSettings: () => saveNotificationSettings(),
+    saveReverseProxySettings: () => saveReverseProxySettings(),
     sendTestNotification:     () => sendTestNotification(),
     savePin:                  () => savePin(),
     changePin:                () => changePin(),
@@ -1952,11 +2046,20 @@ document.addEventListener( 'click', event => {
     if ( action ) action( el );
 } );
 
-// The label list's checkboxes are rebuilt on every render, so their change
-// events are delegated the same way.
+// Change events are delegated the same way, from a table of their own. The
+// label list's checkboxes are rebuilt on every render and need it; the rest
+// simply follow the same pattern rather than inventing another.
+const changeActions = {
+    toggleLabel:        el => toggleLabel( Number( el.dataset.index ) ),
+    toggleReverseProxy: () => updateReverseProxyField(),
+};
+
 document.addEventListener( 'change', event => {
-    const el = event.target.closest( '[data-change="toggleLabel"]' );
-    if ( el ) toggleLabel( Number( el.dataset.index ) );
+    const el = event.target.closest( '[data-change]' );
+    if ( !el ) return;
+
+    const action = changeActions[el.dataset.change];
+    if ( action ) action( el );
 } );
 
 // Everything else is a fixed element that exists from the start.
