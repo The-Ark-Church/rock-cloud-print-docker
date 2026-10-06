@@ -1,7 +1,7 @@
 # Scans the image already published on Docker Hub for known vulnerabilities,
 # once a week, and reports what it finds to the repository's Security tab.
 #
-# The published image goes stale on its own: new CVEs are found in the Debian
+# The published image goes stale on its own: new CVEs are found in the Ubuntu
 # packages of the .NET base image, and Microsoft ships patched base images,
 # without anything in this repository changing. This workflow exists to notice
 # when that has happened, so a maintainer knows a patch release is worth
@@ -73,7 +73,7 @@ jobs:
           # Only findings a rebuild would fix, and only serious ones, so that
           # an alert means "cut a patch release" rather than "read 250 CVEs".
           # Unfixed findings are real, but nothing this repository does can
-          # remove them until Debian or Microsoft ships a fix.
+          # remove them until Ubuntu or Microsoft ships a fix.
           ignore-unfixed: true
           severity: CRITICAL,HIGH
           # Without this the action drops the severity filter for SARIF output
@@ -111,8 +111,8 @@ jobs:
       # rather than reporting on the outside world. It prints to the log
       # instead of uploading SARIF: pull requests from forks get a read-only
       # token, so an upload would fail for exactly the contributors it is for.
-      # HIGH and CRITICAL only; the one LOW finding today, a missing
-      # HEALTHCHECK, is not worth blocking a pull request over.
+      # HIGH and CRITICAL only, so a low-severity style finding never blocks
+      # a pull request.
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config

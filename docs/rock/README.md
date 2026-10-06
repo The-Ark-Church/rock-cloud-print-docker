@@ -1,9 +1,6 @@
 # Rock setup — print failure notifications
 
-> **⚠️ Release candidate.** The proxy side of this exists only in the
-> `1.4.0-rc*` pre-release images, not in `:latest`. You can import and configure
-> the workflow now, but nothing will reach it until you run a build that can
-> send to it. This notice comes out when the feature ships in a release.
+> Requires proxy version 1.4.0 or later.
 
 Print failure notifications need a workflow in Rock. This folder has one you can
 import, so you don't have to build it from scratch.
@@ -44,6 +41,8 @@ Plain text is fine. It permits launching exactly one workflow, and any Rock
 administrator who can read it can already do far more directly.
 
 ## Importing it
+
+**Requires the Workflow StimPack plugin** (by Blue Box Moon) from the Rock Shop. The workflow uses its For Each action to loop through the people it notifies. Install it before importing.
 
 Admin Tools → Power Tools → Workflow Import, and choose
 `cloud-print-failure-notification.json`.

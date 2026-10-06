@@ -760,7 +760,7 @@ public class Program
                 LabelSaveOutcome.AlreadyExists => Results.Json( new { error = $"There is already a label called '{name}'. Delete that one first, or use another name." }, statusCode: 409 ),
                 LabelSaveOutcome.TooLarge => Results.Json( new { error = "That label is too large." }, statusCode: 400 ),
                 LabelSaveOutcome.NotZpl => Results.Json( new { error = "That does not look like ZPL. A label should contain ^XA and ^XZ." }, statusCode: 400 ),
-                LabelSaveOutcome.NoCodeToken => Results.Json( new { error = $"That label has no {ZplTemplate.CodeToken} inside a ^FD field, so there is nowhere to put the security code." }, statusCode: 400 ),
+                LabelSaveOutcome.NoCodeToken => Results.Json( new { error = $"That label has no {ZplTemplate.CodeToken} or {ZplTemplate.LegacyCodeToken} placeholder inside a ^FD field, so there is nowhere to put the security code." }, statusCode: 400 ),
                 _ => Results.Json( new { error = "That label could not be stored." }, statusCode: 400 )
             };
         } );
@@ -890,8 +890,9 @@ public class Program
         // codes went out. Progress is polled, and the only thing that ends a
         // run early is a person pressing Cancel.
         //
-        // Shares the printer test's rate limit, for the same reason it exists:
-        // this opens a connection to whatever address it is given.
+        // Has its own ten-a-minute limit per client, for the same reason the
+        // printer test has one: this opens a connection to whatever address it
+        // is given.
         app.MapPost( "/api/labels/print", ( BlankPrintRequest request, BlankLabelRunner runner, BlankLabelStateStore state ) =>
         {
             var address = ( request.Address ?? string.Empty ).Trim();

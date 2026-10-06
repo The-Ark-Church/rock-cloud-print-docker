@@ -9,7 +9,7 @@
         "IsActive": true,
         "WorkflowIdPrefix": "CPN",
         "Name": "Cloud Print Failure Notification",
-        "Description": "Launched by the Rock Cloud Print proxy's Lava webhook when a check-in label printer fails or prints slowly. Notifies every active member of the Worker Group on every event, and members of the Volunteer Group only while a service they are scheduled for is running. Each person gets one channel: a push-capable device wins, otherwise their own communication preference. ~DEV STATE: all three send actions are wired and LIVE, but _you must populate_ the worker and volunteer groups.~\n\n*This Workflow Requires the Workflow Stimpack plugin*",
+        "Description": "Launched by the Rock Cloud Print proxy's Lava webhook when a check-in label printer fails or prints slowly. Notifies every active member of the Worker Group on every event, and members of the Volunteer Group only while a service they are scheduled for is running. Each person gets one channel: a push-capable device wins, otherwise their own communication preference. It notifies nobody until you set the worker and volunteer groups.\n\n*This Workflow Requires the Workflow Stimpack plugin*",
         "Order": 0,
         "WorkTerm": "Notification",
         "ProcessingIntervalSeconds": 300,
