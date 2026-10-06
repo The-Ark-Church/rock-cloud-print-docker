@@ -16,6 +16,7 @@
 //
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Threading.RateLimiting;
 
 namespace Rock.CloudPrint.Service;
 
@@ -29,6 +30,14 @@ internal sealed record LabelPreviewResult
     public int LengthDots { get; init; }
 
     public string? Error { get; init; }
+
+    /// <summary>
+    /// Whether it was not drawn because too many calls to the renderer were
+    /// already waiting their turn, rather than because the renderer refused
+    /// or could not be reached. Worth telling apart: this one goes away if the
+    /// person waits a moment and tries again.
+    /// </summary>
+    public bool Busy { get; init; }
 
     public bool Ok => Png != null;
 }
@@ -70,13 +79,88 @@ internal sealed class LabelPreview
     private const double FallbackWidthInches = 4;
     private const double FallbackHeightInches = 6;
 
+    /// <summary>
+    /// The least time between two calls to Labelary.
+    ///
+    /// <para>
+    /// Labelary's free tier asks for no more than 3 calls a second. One call
+    /// is allowed straight away and then one more every half second, so no
+    /// stretch of one second can ever hold more than three - however the
+    /// calls happen to line up with the limiter's own clock. A third of a
+    /// second looks like the obvious number but is not: the call allowed
+    /// straight away can land just before the first refill, and then four fit
+    /// inside a second.
+    /// </para>
+    ///
+    /// <para>
+    /// The cost is that a preview of several labels takes a little longer -
+    /// about half a second for each label after the first, so eight take
+    /// three and a half seconds. Someone pressing Preview sees "Drawing" for
+    /// that long. Nothing to do with printing waits on it.
+    /// </para>
+    /// </summary>
+    internal static readonly TimeSpan CallSpacing = TimeSpan.FromMilliseconds( 500 );
+
+    /// <summary>
+    /// How many calls may wait for their turn before more are turned away.
+    /// Three previews of the largest size. Without a bound, somebody pressing
+    /// Preview over and over would build a queue that took minutes to drain,
+    /// holding a request open for every press.
+    /// </summary>
+    internal const int MaxCallsWaiting = 24;
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<LabelPreview> _logger;
 
+    /// <summary>
+    /// Paces every call to Labelary, from every preview request at once.
+    ///
+    /// <para>
+    /// It counts calls, not preview requests, because a preview of eight
+    /// labels is eight calls. A limit on requests alone - which is what there
+    /// was before - let up to eight times the intended rate through. It is
+    /// held here, in the one instance the whole service shares, because the
+    /// rate Labelary asks for applies to this proxy however many people are
+    /// using it.
+    /// </para>
+    ///
+    /// <para>
+    /// A call waits for its turn rather than being refused, so a preview of
+    /// several labels is slower instead of failing half way.
+    /// </para>
+    /// </summary>
+    private readonly RateLimiter _labelaryCalls;
+
     public LabelPreview( IHttpClientFactory httpClientFactory, ILogger<LabelPreview> logger )
+        : this( httpClientFactory, logger, CreateLimiter() )
+    {
+    }
+
+    /// <summary>
+    /// Initializes a preview with a specific limiter. Used by tests, so they
+    /// can decide when each call is allowed to go.
+    /// </summary>
+    internal LabelPreview( IHttpClientFactory httpClientFactory, ILogger<LabelPreview> logger, RateLimiter labelaryCalls )
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _labelaryCalls = labelaryCalls;
+    }
+
+    /// <summary>
+    /// The limiter the service uses: see <see cref="CallSpacing"/>.
+    /// </summary>
+    internal static RateLimiter CreateLimiter()
+    {
+        return new TokenBucketRateLimiter( new TokenBucketRateLimiterOptions
+        {
+            TokenLimit = 1,
+            TokensPerPeriod = 1,
+            ReplenishmentPeriod = CallSpacing,
+            AutoReplenishment = true,
+            QueueLimit = MaxCallsWaiting,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+        } );
     }
 
     /// <summary>
@@ -104,6 +188,24 @@ internal sealed class LabelPreview
             "https://api.labelary.com/v1/printers/8dpmm/labels/{0}x{1}/0/",
             Inches( widthDots, FallbackWidthInches ),
             Inches( lengthDots, FallbackHeightInches ) );
+
+        // Waits its turn. Cancelling - the person closing the tab - takes it
+        // out of the queue, so a preview nobody is waiting for any more does
+        // not hold up the next one. A token bucket never hands a permit back,
+        // so letting go of the lease straight after the call does not shorten
+        // the wait for the next.
+        using var lease = await _labelaryCalls.AcquireAsync( 1, cancellationToken );
+
+        if ( !lease.IsAcquired )
+        {
+            return new LabelPreviewResult
+            {
+                WidthDots = widthDots,
+                LengthDots = lengthDots,
+                Busy = true,
+                Error = "Too many previews are being drawn at once. Wait a moment and try again."
+            };
+        }
 
         using var request = new HttpRequestMessage( HttpMethod.Post, url );
 

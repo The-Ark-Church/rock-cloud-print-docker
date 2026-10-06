@@ -200,12 +200,19 @@ public class Program
                     QueueLimit = 0
                 } ) );
 
-        // The preview endpoint calls a third-party service on every press.
-            // Labelary publishes a free-tier rate for exactly this, and staying
-            // under it is good manners rather than a security measure - the
-            // caller is already past the PIN. It is deliberately one limit for
-            // the whole installation, not per client: the rate Labelary asks
-            // for applies to this proxy however many people are using it.
+            // Preview requests, three a second across the whole installation.
+            //
+            // This is not what keeps the proxy inside Labelary's free-tier
+            // rate. A preview of eight labels is eight calls, so counting
+            // requests let up to eight times that rate through; LabelPreview
+            // now paces the calls themselves, one at a time, from every
+            // request at once. This stays as a cheap first line in front of
+            // that: a script pressing Preview in a loop is turned away here
+            // with a 429, straight away, rather than filling the queue of
+            // calls waiting their turn and making a person's preview wait
+            // behind it. One limit for the whole installation, not per client,
+            // for the same reason the pacing is shared - the rate Labelary
+            // asks for applies to this proxy however many people use it.
             options.AddFixedWindowLimiter( "labelary", o =>
             {
                 o.PermitLimit = 3;
@@ -878,9 +885,17 @@ public class Program
 
             foreach ( var (name, template) in templates )
             {
-                // One at a time rather than together, to stay well inside the
-                // rendering service's published rate.
+                // One at a time rather than together. LabelPreview spaces the
+                // calls to stay inside the rendering service's published rate,
+                // so sending them together would gain nothing.
                 var result = await preview.RenderAsync( template, code, cancellationToken );
+
+                if ( result.Busy )
+                {
+                    // Too many calls already waiting their turn. The UI shows
+                    // a 429's message as it is, and waiting a moment fixes it.
+                    return Results.Json( new { error = result.Error }, statusCode: 429 );
+                }
 
                 if ( !result.Ok )
                 {
