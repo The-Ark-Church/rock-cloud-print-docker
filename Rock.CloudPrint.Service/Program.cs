@@ -260,8 +260,6 @@ public class Program
         // leaves the address alone in every other case.
         app.UseMiddleware<TrustedProxyMiddleware>();
 
-        app.UseRateLimiter();
-
         // ── Security headers ───────────────────────────────────────
         // Applied to every response (including static files). Tailwind is
         // compiled into wwwroot/app.css at build time rather than pulled from
@@ -304,6 +302,25 @@ public class Program
 
         app.UseDefaultFiles();
         app.UseStaticFiles();
+
+        // ── Request header check ───────────────────────────────────────────
+        // Turns away a POST or DELETE to /api that lacks X-CloudPrint-Request,
+        // which is how a request another web page had the browser send gives
+        // itself away (see ApiRequestHeader). Before the PIN check, because it
+        // matters most when there is no PIN; after the security headers, so
+        // the refusal carries them too. Covers /api/auth as well: logging in
+        // is harmless to forge, but logging out is not, and one rule with no
+        // exceptions is easier to trust.
+        app.UseMiddleware<ApiRequestHeaderMiddleware>();
+
+        // After the security headers, so a 429 carries them like every other
+        // response, and after the request header check, so a request another
+        // web page forged is turned away before it can use up the visitor's
+        // login attempts. Still after TrustedProxyMiddleware, which decides
+        // which client a request counts against, and before the PIN check,
+        // since logging in is what the login limit protects. Only routes that
+        // ask for a limit are limited, so static files are unaffected.
+        app.UseRateLimiter();
 
         // ── Authentication middleware ──────────────────────────────────────
         // Protect every /api/* route except /api/auth/* which must remain

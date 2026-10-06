@@ -234,10 +234,17 @@ Always on:
 |---|---|
 | **Rate limits** | `/api/auth/login` allows 5 attempts a minute from each client address, and 30 a minute across all of them, so a mistyped PIN elsewhere cannot lock you out and many addresses together still cannot guess quickly. Printer tests (10 a minute), notification tests (5) and starting a blank-label run (10) each have their own per-address limit. Excess returns HTTP 429 with a message and a `Retry-After` header. The address is the connection's, not `X-Forwarded-For` — unless the web UI is reached through a reverse proxy and [`TrustReverseProxy`](#behind-a-reverse-proxy) is set Label previews are held to 3 a second across the whole proxy, since each one calls Labelary. |
 | **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` that allows scripts and styles from the proxy itself only, images from the proxy and `data:` URLs (label previews), and no plugins, `<base>` changes, outside form targets or framing. There is no `'unsafe-inline'`: the UI's JavaScript is in `app.js` and `theme.js` rather than the page, so injected inline script or `onclick=` attributes would not run |
+| **Request header** | Every `/api` request other than a GET or HEAD must carry an `X-CloudPrint-Request` header (any value), or it is refused with HTTP 403. A browser will not let a page on another site add that header, so a web page someone on your network happens to open cannot have their browser restart the proxy, send a test notification or change a setting — which, with no PIN set, it otherwise could. The web UI sends it on every request. It is not a substitute for the PIN: anything that is not a browser can send it |
 | **Session expiry** | A login lapses after `SessionIdleMinutes` unused (default 8 hours) and, however much it is used, after `SessionMaxHours` (default 24) |
 | **Server header suppression** | `Server: Kestrel` is disabled, so the stack is not advertised |
 | **Non-root runtime** | Runs as `appuser` (UID 1000), chosen to match the typical host volume owner so `./config` stays writable without privilege escalation |
 | **Bearer tokens in `sessionStorage`** | Cleared when the tab closes, rather than `localStorage` |
+
+**Scripting the API?** Send `X-CloudPrint-Request: 1` with every request that is not a GET, alongside the bearer token if a PIN is set:
+
+```bash
+curl -X POST -H 'X-CloudPrint-Request: 1' http://localhost:8080/api/restart
+```
 
 ### PIN protection
 
@@ -769,7 +776,7 @@ The WebSocket connection to Rock and the raw TCP forwarding to printers work as 
 | File | What changed |
 |---|---|
 | `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; targets .NET 10 rather than .NET 8, whose support ends in November 2026; removed Windows runtime identifier, single-file publish, and Windows-only packages |
-| `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware; added the unauthenticated `/healthz` endpoint and the `--healthcheck` probe mode |
+| `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware and the `X-CloudPrint-Request` header check; added the unauthenticated `/healthz` endpoint and the `--healthcheck` probe mode |
 | `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection, `SlowPrintMilliseconds` for the slow-print threshold, and `SessionIdleMinutes` and `SessionMaxHours` for how long a login lasts, and `TrustReverseProxy` and `TrustedProxy` for counting rate limits per client behind a reverse proxy |
 | `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Prints run off the receive loop on their own task: one at a time per printer, in order, with different printers in parallel and no time limit, so an asleep printer delays only its own labels. Successful prints log at `Information` rather than `Debug`, each attempt is timed from when Rock's request arrived and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
 | `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection, and gives it its own `ILogger<ProxyClientWebSocket>` so print activity is attributed separately from worker activity; marks the proxy disconnected when it is stopped for a settings change, which upstream left reported as connected; rebuilds the connection only when `Url`, `Id` or `Name` change, so saving other settings does not drop printing; logs why a connection ended |
@@ -781,6 +788,7 @@ The WebSocket connection to Rock and the raw TCP forwarding to printers work as 
 | `Rock.CloudPrint.Service/ProxyStatus.cs` | Records when the connection was lost, so the health check can allow a grace period |
 | `Rock.CloudPrint.Service/RateLimiting.cs` | New — per-client rate limit keys, the message a refused request is given, and the limiter that counts a login against its own client before the shared ceiling |
 | `Rock.CloudPrint.Service/ReverseProxy.cs` | New — when `TrustReverseProxy` is on, takes the client's address from `X-Forwarded-For` on requests from the configured proxy only, before the rate limiter runs |
+| `Rock.CloudPrint.Service/ApiRequestHeader.cs` | New — refuses a POST or DELETE to `/api` without the `X-CloudPrint-Request` header, so another site's page cannot drive the API through a visitor's browser |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication. Tokens lapse when idle or too old, lapsed ones are pruned, and the PIN is compared in constant time |
 | `Rock.CloudPrint.Service/SettingsFile.cs` | New — saves the web UI's settings to `config/appsettings.json` one change at a time and with an atomic write, so two saves cannot undo each other and a power cut cannot leave a file the proxy fails to start with |
 | `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only, cleared on restart. Entries carry a sequence number so the UI fetches only what is new |

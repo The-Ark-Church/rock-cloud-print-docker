@@ -8,10 +8,20 @@ let authToken     = sessionStorage.getItem( 'rock-cp-token' ) || '';
 let authRequired  = false;
 let appInitialized = false;
 
-// Wraps fetch() with the bearer token. On 401 clears the token and
-// shows the login overlay; the thrown error lets callers bail out.
+// The server refuses any POST or DELETE to /api that lacks this header. A
+// browser will not let a page on another site add it, so its presence is what
+// tells the server the request came from this page and not from some other
+// site the visitor has open. The value does not matter. Every request that is
+// not a GET must carry it, which authFetch() does; the few calls that use
+// fetch() directly (login, logout, restart) spread it in themselves.
+const API_REQUEST_HEADER = { 'X-CloudPrint-Request': '1' };
+
+// Wraps fetch() with the bearer token and API_REQUEST_HEADER. On 401 clears
+// the token and shows the login overlay; the thrown error lets callers bail
+// out. The header goes on every request, GETs included, so a caller never has
+// to think about which ones need it.
 async function authFetch( url, opts = {} ) {
-    const headers = { ...(opts.headers || {}) };
+    const headers = { ...(opts.headers || {}), ...API_REQUEST_HEADER };
     if ( authToken ) headers['Authorization'] = 'Bearer ' + authToken;
     const resp = await fetch( url, { ...opts, headers } );
     if ( resp.status === 401 ) {
@@ -69,7 +79,7 @@ async function doLogin() {
     try {
         const resp = await fetch( '/api/auth/login', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...API_REQUEST_HEADER },
             body:    JSON.stringify( { password: pin } )
         } );
 
@@ -129,7 +139,8 @@ async function resumeCapture() {
 
 async function doLogout() {
     try {
-        const headers = authToken ? { 'Authorization': 'Bearer ' + authToken } : {};
+        const headers = { ...API_REQUEST_HEADER };
+        if ( authToken ) headers['Authorization'] = 'Bearer ' + authToken;
         await fetch( '/api/auth/logout', { method: 'POST', headers } );
     } catch ( _ ) {}
     authToken = '';
@@ -1982,7 +1993,8 @@ async function restartService() {
     // Trigger the restart. The server may close the socket before the
     // response completes — that is expected and harmless.
     try {
-        const headers = authToken ? { 'Authorization': 'Bearer ' + authToken } : {};
+        const headers = { ...API_REQUEST_HEADER };
+        if ( authToken ) headers['Authorization'] = 'Bearer ' + authToken;
         await fetch( '/api/restart', { method: 'POST', headers } );
     } catch ( _ ) {}
 
