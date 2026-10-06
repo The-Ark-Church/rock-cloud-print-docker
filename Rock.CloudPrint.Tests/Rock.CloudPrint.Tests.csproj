@@ -12,6 +12,12 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!--
+      Hosts the real Program in memory for HttpApiTests, so the middleware
+      order and endpoint wiring are tested as the container runs them. Kept on
+      the same patch release as the ASP.NET Core runtime in the SDK image.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
   </ItemGroup>
 
   <!--
