@@ -202,6 +202,8 @@ class ProxyWorker : BackgroundService
     {
         await _lock.WaitAsync( cancellationToken );
 
+        var wasRunning = _proxy != null;
+
         try
         {
             if ( _proxy != null )
@@ -214,6 +216,18 @@ class ProxyWorker : BackgroundService
         finally
         {
             _proxy = null;
+
+            // Proxy_Closed cannot do this one. It waits on the lock held here,
+            // and by the time it gets it _proxy has been cleared, so it no
+            // longer recognises the proxy as ours. Without this the status
+            // stayed connected after a settings change until the next
+            // connection succeeded - forever, if the new settings were wrong,
+            // with the health check reporting healthy all the while.
+            if ( wasRunning )
+            {
+                _status.SetConnected( false );
+            }
+
             _lock.Release();
         }
     }
