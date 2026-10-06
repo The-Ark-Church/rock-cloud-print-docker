@@ -792,6 +792,54 @@
             </div>
         </div>
 
+        <!-- Reverse proxy -->
+        <div class="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
+            <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Reverse proxy</h2>
+
+            <!-- Env-var notice (settings locked by docker-compose) -->
+            <div id="proxy-envvar-notice" class="hidden bg-yellow-50 border border-yellow-200 rounded-md p-3 text-sm text-yellow-800">
+                <strong>Set via environment variables.</strong> These come from the
+                <code class="bg-yellow-100 px-1 rounded text-xs">TrustReverseProxy</code> and
+                <code class="bg-yellow-100 px-1 rounded text-xs">TrustedProxy</code> variables in your
+                <code class="bg-yellow-100 px-1 rounded text-xs">docker-compose.yml</code>. To change them,
+                edit that file and restart the container.
+            </div>
+
+            <p class="text-sm text-gray-500">
+                Leave this off if people open this page directly. Turn it on only if they reach it
+                through another device that passes their requests along, so that the login limit
+                counts each person separately instead of everybody as the proxy.
+            </p>
+
+            <label class="flex items-center space-x-2">
+                <input id="proxy-enabled" type="checkbox" data-change="toggleReverseProxy" class="rounded border-gray-300" />
+                <span class="text-sm font-medium text-gray-700">This page is reached through a reverse proxy (for example a firewall)</span>
+            </label>
+
+            <div id="proxy-address-field" class="hidden">
+                <label for="proxy-address" class="block text-sm font-medium text-gray-700 mb-1">Proxy IP address</label>
+                <p class="text-xs text-gray-400 mb-1">
+                    Only requests arriving from this address may say which client they came from
+                    (in the X-Forwarded-For header); anything else saying so is ignored. Use the
+                    proxy's address as this container sees it, which may not be the one people
+                    type into their browser. Separate several with commas.
+                </p>
+                <input id="proxy-address" type="text" required placeholder="192.0.2.1"
+                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+
+            <div id="proxy-message" class="hidden"></div>
+
+            <div id="proxy-save-row" class="flex items-center justify-between pt-2 border-t border-gray-100">
+                <button data-action="saveReverseProxySettings"
+                    class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+                           px-4 py-2 rounded-md transition-colors">
+                    Save
+                </button>
+            </div>
+        </div>
+
     </div>
 
     <script src="/app.js"></script>

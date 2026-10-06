@@ -101,4 +101,29 @@ internal class CloudPrintOptions
     /// notification; ten printers failing produce ten.
     /// </summary>
     public int NotificationCooldownMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Whether the web UI is reached through a reverse proxy, such as a
+    /// firewall that publishes it under a host name. Off by default, and
+    /// direct access needs nothing.
+    ///
+    /// <para>
+    /// It matters for the rate limits, which count per client address. Behind
+    /// a reverse proxy every request arrives from the proxy, so every person
+    /// would share one allowance and one wrong PIN elsewhere would count
+    /// against everybody. Turned on, a request that comes from
+    /// <see cref="TrustedProxy"/> is counted against the address the proxy
+    /// says it forwarded for, in <c>X-Forwarded-For</c>. A request from
+    /// anywhere else is counted as it always was, whatever it claims.
+    /// </para>
+    /// </summary>
+    public bool TrustReverseProxy { get; set; }
+
+    /// <summary>
+    /// The reverse proxy's IP address as this container sees it, or several
+    /// separated by commas. Only a request whose connection comes from one of
+    /// these may say which client it came from. Required when
+    /// <see cref="TrustReverseProxy"/> is on; ignored when it is off.
+    /// </summary>
+    public string TrustedProxy { get; set; } = string.Empty;
 }
