@@ -152,7 +152,9 @@ Open the firewall (`sudo ufw allow 8080/tcp`), then configure as in Quick start 
 
 ## Configuration
 
-Three ways. Environment variables take precedence over the web UI.
+Three ways. A setting saved in the web UI, or written to `config/appsettings.json`, wins over the same setting in `docker-compose.yml`: an environment variable is only used until something is saved for that setting. The PIN is the exception. When `Password` is set in the environment, the web UI won't change it.
+
+If you add `Password` to `docker-compose.yml` after setting a PIN in the web UI, the PIN saved in the web UI still applies. Remove it there first (Settings → Security, leave the new PIN blank), or delete the `Password` line from `config/appsettings.json`.
 
 **A — Web UI (recommended).** Settings tab. Written to `config/appsettings.json` on the host, persisted through the `./config:/app/config` mount.
 
