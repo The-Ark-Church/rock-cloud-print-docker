@@ -55,6 +55,29 @@ class ProxyClientWebSocket : ProxyWebSocket
     private readonly FailureNotifier _notifier;
 
     /// <summary>
+    /// The most recent print queued for each printer address. Each new print
+    /// for an address waits for the one before it, so labels for the same
+    /// printer are sent one at a time and in the order the server sent them,
+    /// while different printers proceed independently. Guarded by locking on
+    /// itself.
+    ///
+    /// <para>
+    /// The order is fixed here, on the receive loop, as each request arrives.
+    /// Starting each print on its own task and having it take a lock there
+    /// would leave the order to whichever task the thread pool ran first.
+    /// </para>
+    ///
+    /// <para>
+    /// Static because a new instance of this class is created for every
+    /// connection to the server. A print still waiting on a sleeping printer
+    /// when the connection is rebuilt carries on, and the next label for that
+    /// printer must still queue behind it rather than open a second connection
+    /// to it alongside.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, Task> _printerQueues = new( StringComparer.OrdinalIgnoreCase );
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProxyClientWebSocket"/> class.
     /// </summary>
     /// <param name="socket">The <see cref="WebSocket"/> used for communication.</param>
@@ -88,18 +111,70 @@ class ProxyClientWebSocket : ProxyWebSocket
         }
         else if ( message is CloudPrintMessagePrint printMessage )
         {
+            // Printing runs on its own task rather than inline.
+            //
+            // The receive loop awaits this handler, and the receive loop is the
+            // only thing reading the socket. Printed inline, a printer that is
+            // asleep or switched off - whose connect attempt can sit unanswered
+            // for two minutes - stopped every other printer in the building,
+            // and stopped the proxy answering the server's pings, until the
+            // server gave up on the connection.
+            //
+            // There is deliberately no time limit here. A printer waking from
+            // sleep can take well over a minute to answer, and a guessed limit
+            // on this path was rolled back once already for failing exactly
+            // that printer. A slow printer now delays only its own labels.
+            //
+            // The data is copied so it cannot depend on how long the caller
+            // keeps its buffer alive.
+            var payload = extraData.ToArray();
+            var receivedAt = Stopwatch.GetTimestamp();
             var labelCount = printMessage.Count > 0 ? printMessage.Count : 1;
 
             _status.AddLabels( labelCount );
 
-            var startedAt = Stopwatch.GetTimestamp();
-            var printResult = await SendPrintDataAsync( printMessage.Address, extraData, cancellationToken );
-            var elapsed = Stopwatch.GetElapsedTime( startedAt );
+            lock ( _printerQueues )
+            {
+                var previous = _printerQueues.TryGetValue( printMessage.Address, out var queued )
+                    ? queued
+                    : Task.CompletedTask;
+
+                _printerQueues[printMessage.Address] = Task.Run( () => PrintAsync( previous, printMessage, labelCount, payload, receivedAt, cancellationToken ) );
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles one print request, off the receive loop, once the print queued
+    /// ahead of it for the same printer has finished.
+    /// </summary>
+    /// <param name="previous">The print queued ahead of this one for the same printer.</param>
+    /// <param name="printMessage">The print request.</param>
+    /// <param name="labelCount">The number of labels in the request.</param>
+    /// <param name="payload">The data to send to the printer.</param>
+    /// <param name="receivedAt">When the request arrived, as a <see cref="Stopwatch"/> timestamp.</param>
+    /// <param name="cancellationToken">A token that indicates if the operation should be cancelled.</param>
+    private async Task PrintAsync( Task previous, CloudPrintMessagePrint printMessage, int labelCount, byte[] payload, long receivedAt, CancellationToken cancellationToken )
+    {
+        var address = printMessage.Address;
+
+        try
+        {
+            // Never throws: the task ahead is another call to this method, which
+            // catches everything.
+            await previous;
+
+            var printResult = await SendPrintDataAsync( address, payload, cancellationToken );
+
+            // Measured from when the request arrived, not from when this
+            // printer's turn came, because time spent queued behind an
+            // earlier label is time the server spent waiting too.
+            var elapsed = Stopwatch.GetElapsedTime( receivedAt );
 
             try
             {
                 // Respond first so our own bookkeeping never delays the server.
-                await PostResponseAsync( message, printResult, cancellationToken );
+                await PostResponseAsync( printMessage, printResult, cancellationToken );
             }
             finally
             {
@@ -109,8 +184,16 @@ class ProxyClientWebSocket : ProxyWebSocket
                 // print was counted neither as failed nor as slow, the label
                 // total disagreed with the failure total, and no notification
                 // was sent for the very case most worth hearing about.
-                RecordPrintResult( printMessage.Address, labelCount, printResult, elapsed );
+                RecordPrintResult( address, labelCount, printResult, elapsed );
             }
+        }
+        catch ( Exception ex )
+        {
+            // Nothing may escape: this runs on its own task, where an exception
+            // would go unobserved. The usual one is the response write failing
+            // because the connection it arrived on has since closed - the label
+            // has already been printed and recorded by then.
+            _logger.LogError( ex, "Print handling failed for {address}.", address );
         }
     }
 
@@ -135,9 +218,8 @@ class ProxyClientWebSocket : ProxyWebSocket
                 slowThresholdMilliseconds: _slowPrintMilliseconds );
 
             // Decides for itself whether this is worth reporting, and dispatches
-            // to a background task. Never awaited: the print path is inline on
-            // the receive loop, so anything slow here stops the proxy answering
-            // the server at all.
+            // to a background task. Never awaited: anything slow here delays
+            // the next label queued for this printer.
             _notifier.OnPrintResult( printEvent, labelCount );
         }
         catch ( Exception ex )
