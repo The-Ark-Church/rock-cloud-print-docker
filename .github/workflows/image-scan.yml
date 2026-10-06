@@ -1,0 +1,122 @@
+# Scans the image already published on Docker Hub for known vulnerabilities,
+# once a week, and reports what it finds to the repository's Security tab.
+#
+# The published image goes stale on its own: new CVEs are found in the Debian
+# packages of the .NET base image, and Microsoft ships patched base images,
+# without anything in this repository changing. This workflow exists to notice
+# when that has happened, so a maintainer knows a patch release is worth
+# cutting.
+#
+# It never builds, tags or publishes anything. Releasing stays a deliberate act
+# of pushing a version tag (see release.yml), which rebuilds on the latest base
+# image. A scan that fixed things by republishing on its own would put an
+# untested image under :latest on machines printing check-in labels.
+#
+# Third-party actions are pinned to commit SHAs for the reason given in
+# release.yml. That matters doubly here: in March 2026 an attacker force-pushed
+# almost every trivy-action tag to credential-stealing code (GHSA-69fq-xp46-6x23).
+# The pin below is v0.36.0, published after the clean-up as an immutable
+# release.
+name: image-scan
+
+on:
+  schedule:
+    # Monday 06:17 UTC, so findings are waiting before the week's work starts
+    # and there is time to cut a release well before Sunday. The odd minute
+    # avoids the top-of-the-hour queue that delays scheduled runs.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .github/workflows/image-scan.yml
+
+# Nothing by default; each job asks for exactly what it needs.
+permissions: {}
+
+jobs:
+  image:
+    name: Scan published image (${{ matrix.platform }})
+    # A pull request cannot change the published image, so scanning it there
+    # would only repeat the weekly result.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      # One architecture's result is still worth uploading if the other fails.
+      fail-fast: false
+      matrix:
+        # Scanned separately because the arm64 and amd64 package sets are built
+        # independently and can be patched on different days.
+        platform: [ linux/amd64, linux/arm64 ]
+
+    env:
+      # Read by Trivy directly, since the action has no input for either. The
+      # image is fetched straight from the registry; nothing is pulled into
+      # Docker, so the runner's architecture does not matter.
+      TRIVY_PLATFORM: ${{ matrix.platform }}
+      TRIVY_IMAGE_SRC: remote
+
+    steps:
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: asdfinit/rock-cloudprint:latest
+          # The action's default Trivy, v0.70.0, is affected by a path traversal
+          # through a crafted vulnerability database (GHSA-mcj4-mphf-j9ff, fixed
+          # in v0.71.1). Pinning a version also keeps the scan off "latest",
+          # which is how the March 2026 compromise reached some users.
+          version: v0.74.0
+          # Only findings a rebuild would fix, and only serious ones, so that
+          # an alert means "cut a patch release" rather than "read 250 CVEs".
+          # Unfixed findings are real, but nothing this repository does can
+          # remove them until Debian or Microsoft ships a fix.
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          # Without this the action drops the severity filter for SARIF output
+          # and uploads every severity.
+          limit-severities-for-sarif: true
+          format: sarif
+          output: trivy-results.sarif
+          # Findings do not fail the run. The report is the alert list in the
+          # Security tab, and a red run would only say the same thing with
+          # less detail. A failure here therefore means the scan itself broke.
+          exit-code: '0'
+
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-results.sarif
+          # One category per architecture, so each upload replaces only its
+          # own earlier results. An alert closes by itself once a later scan
+          # of that architecture no longer finds it.
+          category: trivy-image-${{ matrix.platform }}
+
+  dockerfile:
+    name: Scan Dockerfile configuration
+    # Only on pull requests that touch the Dockerfile (see paths above), where
+    # a finding is caused by the change under review.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Unlike the image scan this does fail, because it is judging a change
+      # rather than reporting on the outside world. It prints to the log
+      # instead of uploading SARIF: pull requests from forks get a read-only
+      # token, so an upload would fail for exactly the contributors it is for.
+      # HIGH and CRITICAL only; the one LOW finding today, a missing
+      # HEALTHCHECK, is not worth blocking a pull request over.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          version: v0.74.0
+          severity: CRITICAL,HIGH
+          exit-code: '1'
