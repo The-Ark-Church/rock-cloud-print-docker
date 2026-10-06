@@ -335,6 +335,12 @@ class FakeRock:
                 fin, opcode, payload = frame
 
                 if opcode == OP_CLOSE:
+                    # Answer a close with a close and end the connection, as a
+                    # real server does (RFC 6455 5.5.1). Without it the proxy's
+                    # CloseAsync waits for a reply that never comes, so a
+                    # settings change or a docker stop hangs.
+                    connection.close(struct.unpack("!H", payload[:2])[0]
+                                     if len(payload) >= 2 else 1000)
                     break
 
                 if opcode == OP_PING:

@@ -382,15 +382,24 @@ internal class FailureNotifier
         try
         {
             using var document = JsonDocument.Parse( body );
+            var root = document.RootElement;
 
-            if ( document.RootElement.TryGetProperty( "accepted", out var acceptedElement ) )
+            // Rock answered, so a body of an unexpected shape - an array, or a
+            // workflowError that is not a string - must not fall through to the
+            // "could not be reached" catch-all in SendAsync.
+            if ( root.ValueKind == JsonValueKind.Object )
             {
-                accepted = acceptedElement.ValueKind == JsonValueKind.True;
-            }
+                if ( root.TryGetProperty( "accepted", out var acceptedElement ) )
+                {
+                    accepted = acceptedElement.ValueKind == JsonValueKind.True;
+                }
 
-            if ( document.RootElement.TryGetProperty( "workflowError", out var errorElement ) )
-            {
-                workflowError = errorElement.GetString() ?? string.Empty;
+                if ( root.TryGetProperty( "workflowError", out var errorElement ) )
+                {
+                    workflowError = errorElement.ValueKind == JsonValueKind.String
+                        ? errorElement.GetString() ?? string.Empty
+                        : errorElement.GetRawText();
+                }
             }
         }
         catch ( JsonException )

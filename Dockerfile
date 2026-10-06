@@ -57,6 +57,11 @@ RUN dotnet publish Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj \
 
 # ── Runtime image ────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+
+# Without this a locally built image reports the Ubuntu base image's version
+# label. The release workflow overrides it with the tag's version.
+ARG VERSION=0.0.0-dev
+LABEL org.opencontainers.image.version=$VERSION
 WORKDIR /app
 COPY --from=build /app/publish .
 

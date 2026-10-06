@@ -47,9 +47,6 @@ jobs:
           # than breaking on the day a retarget merges without a matching
           # setup-dotnet change.
           #
-          # And it never tries to build Rock.CloudPrint.Shared's net472
-          # target, which cannot be built on a Linux runner.
-          #
           # The cost is slightly less precise type information, and so a
           # little less precise dataflow, than a real build would give. For a
           # small codebase of minimal APIs that is a fair price for a

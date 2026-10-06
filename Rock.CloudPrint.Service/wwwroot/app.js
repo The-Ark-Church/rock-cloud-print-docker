@@ -101,7 +101,7 @@ async function doLogin() {
             resumeAfterLogin();
         }
     } catch ( err ) {
-        errEl.textContent = 'Error: ' + escHtml( err.message );
+        errEl.textContent = 'Error: ' + err.message;
         errEl.classList.remove( 'hidden' );
     }
 }
@@ -657,8 +657,12 @@ function clearLogs() {
     applyLogFilter();
 }
 
+// Escapes quotes as well, so the result is safe inside an attribute value
+// as well as between tags.
 function escHtml( str ) {
-    return (str || '').replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' );
+    return String( str ?? '' )
+        .replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' )
+        .replace( /"/g, '&quot;' ).replace( /'/g, '&#39;' );
 }
 
 // ── Notifications ────────────────────────────────

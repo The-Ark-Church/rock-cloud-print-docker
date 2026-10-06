@@ -127,6 +127,13 @@ class ProxyClientWebSocket : ProxyWebSocket
             //
             // The data is copied so it cannot depend on how long the caller
             // keeps its buffer alive.
+            // Rock sends a null address for a printer device with no IP set.
+            // The queue below is keyed by address, and a null key would throw
+            // here on the receive loop and drop the connection for every
+            // printer. As an empty string it fails to parse in PrintAsync and
+            // that one print is answered with the reason, as before.
+            printMessage.Address ??= string.Empty;
+
             var payload = extraData.ToArray();
             var receivedAt = Stopwatch.GetTimestamp();
             var labelCount = printMessage.Count > 0 ? printMessage.Count : 1;
@@ -298,7 +305,19 @@ class ProxyClientWebSocket : ProxyWebSocket
         var printerEndpoint = PrinterAddress.Parse( ipAddress ).ToEndPoint();
         var socket = new Socket( AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp );
 
-        await socket.ConnectAsync( printerEndpoint, cancellationToken );
+        try
+        {
+            await socket.ConnectAsync( printerEndpoint, cancellationToken );
+        }
+        catch
+        {
+            // The caller never gets a socket that failed to connect, so it
+            // cannot dispose it. Without this, every unreachable printer held
+            // a file handle until the garbage collector got round to it.
+            socket.Dispose();
+
+            throw;
+        }
 
         return socket;
     }

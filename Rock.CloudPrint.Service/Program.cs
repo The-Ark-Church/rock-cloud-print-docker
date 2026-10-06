@@ -930,7 +930,7 @@ public class Program
                 BlankRunStartOutcome.BadAddress => Results.Json(
                     new { error = detail ?? "That is not a printer address." }, statusCode: 400 ),
                 BlankRunStartOutcome.BadQuantity => Results.Json(
-                    new { error = "Enter how many copies to print." }, statusCode: 400 ),
+                    new { error = $"Enter how many copies to print, from 1 to {BlankLabelRunner.MaxQuantity:N0}." }, statusCode: 400 ),
                 BlankRunStartOutcome.BadCodeLength => Results.Json(
                     new { error = $"A security code is between 1 and {SecurityCode.MaxLength} characters." }, statusCode: 400 ),
                 BlankRunStartOutcome.NotEnoughCodes => Results.Json(
@@ -1098,12 +1098,14 @@ public class Program
     /// </summary>
     private static int RunHealthCheck()
     {
+        // The same order the service reads them in: the settings file last, so
+        // a Urls saved there wins over the environment as it does for Kestrel.
         var config = new ConfigurationBuilder()
             .SetBasePath( Directory.GetCurrentDirectory() )
-            .AddEnvironmentVariables( "ASPNETCORE_" )
             .AddJsonFile( "appsettings.json", optional: true )
-            .AddJsonFile( "config/appsettings.json", optional: true )
+            .AddEnvironmentVariables( "ASPNETCORE_" )
             .AddEnvironmentVariables()
+            .AddJsonFile( "config/appsettings.json", optional: true )
             .Build();
 
         var url = ProxyHealth.ResolveProbeUrl( config["Urls"] );
