@@ -43,12 +43,12 @@ public class PrinterBookTests : IDisposable
     [Fact]
     public void WhatIsSavedComesBackAfterARestart()
     {
-        Assert.Equal( PrinterSaveOutcome.Saved, NewBook().Save( "Kids Check-in", "10.0.40.20", true ) );
+        Assert.Equal( PrinterSaveOutcome.Saved, NewBook().Save( "Kids Check-in", "192.0.2.20", true ) );
 
         var printer = Assert.Single( NewBook().List() );
 
         Assert.Equal( "Kids Check-in", printer.Name );
-        Assert.Equal( "10.0.40.20", printer.Address );
+        Assert.Equal( "192.0.2.20", printer.Address );
         Assert.True( printer.HasCutter );
     }
 
@@ -57,8 +57,8 @@ public class PrinterBookTests : IDisposable
     {
         var book = NewBook();
 
-        book.Save( "Has one", "10.0.40.20", true );
-        book.Save( "Has none", "10.0.40.21", false );
+        book.Save( "Has one", "192.0.2.20", true );
+        book.Save( "Has none", "192.0.2.21", false );
 
         // The whole reason it is stored here: somebody picking a printer by
         // name is exactly the person who would not know which is which.
@@ -71,12 +71,12 @@ public class PrinterBookTests : IDisposable
     {
         var book = NewBook();
 
-        book.Save( "Welcome Desk", "10.0.40.20", false );
-        book.Save( "Welcome Desk", "10.0.40.99", true );
+        book.Save( "Welcome Desk", "192.0.2.20", false );
+        book.Save( "Welcome Desk", "192.0.2.99", true );
 
         var printer = Assert.Single( book.List() );
 
-        Assert.Equal( "10.0.40.99", printer.Address );
+        Assert.Equal( "192.0.2.99", printer.Address );
         Assert.True( printer.HasCutter );
     }
 
@@ -85,8 +85,8 @@ public class PrinterBookTests : IDisposable
     {
         var book = NewBook();
 
-        book.Save( "Welcome Desk", "10.0.40.20", false );
-        book.Save( "welcome desk", "10.0.40.99", false );
+        book.Save( "Welcome Desk", "192.0.2.20", false );
+        book.Save( "welcome desk", "192.0.2.99", false );
 
         Assert.Single( book.List() );
     }
@@ -96,9 +96,9 @@ public class PrinterBookTests : IDisposable
     {
         var book = NewBook();
 
-        book.Save( "Office Zebra", "10.0.40.9", false );
-        book.Save( "Kids Check-in", "10.0.40.20", false );
-        book.Save( "Welcome Desk", "10.0.40.21", false );
+        book.Save( "Office Zebra", "192.0.2.9", false );
+        book.Save( "Kids Check-in", "192.0.2.20", false );
+        book.Save( "Welcome Desk", "192.0.2.21", false );
 
         Assert.Equal(
             new[] { "Kids Check-in", "Office Zebra", "Welcome Desk" },
@@ -110,7 +110,7 @@ public class PrinterBookTests : IDisposable
     {
         var book = NewBook();
 
-        book.Save( "Kids Check-in", "10.0.40.20", false );
+        book.Save( "Kids Check-in", "192.0.2.20", false );
 
         Assert.True( book.Delete( "kids check-in" ) );
         Assert.Empty( NewBook().List() );
@@ -130,7 +130,7 @@ public class PrinterBookTests : IDisposable
     [InlineData( "Desk?" )]
     public void ANameThatCouldNotTravelInAUrlIsRefused( string name )
     {
-        Assert.Equal( PrinterSaveOutcome.InvalidName, NewBook().Save( name, "10.0.40.20", false ) );
+        Assert.Equal( PrinterSaveOutcome.InvalidName, NewBook().Save( name, "192.0.2.20", false ) );
     }
 
     [Fact]
@@ -138,14 +138,14 @@ public class PrinterBookTests : IDisposable
     {
         var name = new string( 'a', PrinterBook.MaxNameLength + 1 );
 
-        Assert.Equal( PrinterSaveOutcome.InvalidName, NewBook().Save( name, "10.0.40.20", false ) );
+        Assert.Equal( PrinterSaveOutcome.InvalidName, NewBook().Save( name, "192.0.2.20", false ) );
     }
 
     [Theory]
     [InlineData( "" )]
     [InlineData( "printer.local" )]
     [InlineData( "not an address" )]
-    [InlineData( "10.0.40.20:99999" )]
+    [InlineData( "192.0.2.20:99999" )]
     public void AnAddressThePrintPathCouldNotUseIsRefused( string address )
     {
         // Refused here rather than at the moment somebody presses print, which
@@ -158,8 +158,8 @@ public class PrinterBookTests : IDisposable
     {
         var book = NewBook();
 
-        Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "On another port", "10.0.40.20:9101", false ) );
-        Assert.Equal( "10.0.40.20:9101", Assert.Single( book.List() ).Address );
+        Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "On another port", "192.0.2.20:9101", false ) );
+        Assert.Equal( "192.0.2.20:9101", Assert.Single( book.List() ).Address );
     }
 
     [Fact]
@@ -167,12 +167,12 @@ public class PrinterBookTests : IDisposable
     {
         var book = NewBook();
 
-        book.Save( "  Kids Check-in  ", "  10.0.40.20  ", false );
+        book.Save( "  Kids Check-in  ", "  192.0.2.20  ", false );
 
         var printer = Assert.Single( book.List() );
 
         Assert.Equal( "Kids Check-in", printer.Name );
-        Assert.Equal( "10.0.40.20", printer.Address );
+        Assert.Equal( "192.0.2.20", printer.Address );
     }
 
     [Fact]
@@ -182,14 +182,14 @@ public class PrinterBookTests : IDisposable
 
         for ( var i = 0; i < PrinterBook.MaxPrinters; i++ )
         {
-            Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "Printer " + i, "10.0.40." + i, false ) );
+            Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "Printer " + i, "192.0.2." + i, false ) );
         }
 
-        Assert.Equal( PrinterSaveOutcome.TooMany, book.Save( "One too many", "10.0.41.1", false ) );
+        Assert.Equal( PrinterSaveOutcome.TooMany, book.Save( "One too many", "198.51.100.1", false ) );
 
         // Replacing one that is already there is not growth, so it still works
         // at the cap. Otherwise a full list could never be corrected.
-        Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "Printer 0", "10.0.40.200", false ) );
+        Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "Printer 0", "192.0.2.200", false ) );
     }
 
     [Fact]
@@ -199,9 +199,9 @@ public class PrinterBookTests : IDisposable
 
         File.WriteAllText( Path_, """
             [
-              { "name": "Good", "address": "10.0.40.20", "hasCutter": true },
+              { "name": "Good", "address": "192.0.2.20", "hasCutter": true },
               { "name": "Bad address", "address": "printer.local", "hasCutter": false },
-              { "name": "Bad/name", "address": "10.0.40.21", "hasCutter": false }
+              { "name": "Bad/name", "address": "192.0.2.21", "hasCutter": false }
             ]
             """ );
 
@@ -223,7 +223,7 @@ public class PrinterBookTests : IDisposable
 
         // Nothing in the print path reads this, so a lost file costs somebody
         // some typing and must not stop them saving a printer again.
-        Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "Kids Check-in", "10.0.40.20", false ) );
+        Assert.Equal( PrinterSaveOutcome.Saved, book.Save( "Kids Check-in", "192.0.2.20", false ) );
         Assert.Single( NewBook().List() );
     }
 }

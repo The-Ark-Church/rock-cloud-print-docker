@@ -140,7 +140,7 @@ public class BlankLabelStateStoreTests : IDisposable
                     Id = "abc",
                     StartedAt = started,
                     Status = "failed",
-                    Printer = "10.0.0.5:9100",
+                    Printer = "192.0.2.5:9100",
                     Mode = "sequential",
                     Labels = new[] { "Demo-Child-Label", "Demo-Roster-Label" },
                     Quantity = 30,
