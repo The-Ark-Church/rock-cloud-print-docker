@@ -44,28 +44,29 @@
 
     <!-- ── Header ─────────────────────────────────────────────────────── -->
     <header class="bg-white border-b border-gray-200">
-        <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <img src="/icon.png" alt="Rock Cloud Print" class="w-8 h-8">
-                <h1 class="text-lg font-semibold text-gray-900">Rock Cloud Print</h1>
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+            <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <img src="/icon.png" alt="Rock Cloud Print" class="w-8 h-8 flex-shrink-0">
+                <h1 class="text-base sm:text-lg font-semibold text-gray-900 whitespace-nowrap truncate min-w-0">Rock Cloud Print</h1>
                 <span id="version-badge"
                     class="hidden text-xs font-medium text-gray-500 bg-gray-100 border border-gray-200
-                           rounded px-1.5 py-0.5 tabular-nums"></span>
+                           rounded px-1.5 py-0.5 tabular-nums whitespace-nowrap flex-shrink-0"></span>
             </div>
-            <div class="flex items-center space-x-2">
+            <div class="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
                 <button id="logout-btn" data-action="doLogout"
                     class="hidden items-center space-x-1.5 text-sm text-gray-500 hover:text-gray-700
-                           transition-colors px-3 py-1.5 rounded-md hover:bg-gray-100
+                           transition-colors px-2 sm:px-3 py-1.5 rounded-md hover:bg-gray-100
                            border border-transparent hover:border-gray-200">
                     <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
-                    Log out
+                    <span class="hidden sm:inline">Log out</span>
+                    <span class="sr-only sm:hidden">Log out</span>
                 </button>
                 <button id="theme-btn" data-action="toggleTheme" title="Switch to dark"
                     class="flex items-center text-sm text-gray-500 hover:text-gray-700
-                           transition-colors px-3 py-1.5 rounded-md hover:bg-gray-100
+                           transition-colors px-2 sm:px-3 py-1.5 rounded-md hover:bg-gray-100
                            border border-transparent hover:border-gray-200">
                     <!-- Whichever mode the click leads to. Only one is ever shown. -->
                     <svg id="theme-icon-moon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,48 +80,67 @@
                     </svg>
                     <span class="sr-only">Switch between light and dark</span>
                 </button>
-                <button data-action="restartService"
+                <button data-action="restartService" title="Restart"
                     class="flex items-center space-x-1.5 text-sm text-gray-500 hover:text-red-600
-                           transition-colors px-3 py-1.5 rounded-md hover:bg-red-50
+                           transition-colors px-2 sm:px-3 py-1.5 rounded-md hover:bg-red-50
                            border border-transparent hover:border-red-200">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    <span>Restart</span>
+                    <span class="hidden sm:inline">Restart</span>
+                    <span class="sr-only sm:hidden">Restart</span>
                 </button>
             </div>
         </div>
     </header>
 
     <!-- ── Tab bar ────────────────────────────────────────────────────── -->
-    <div class="max-w-4xl mx-auto px-6 mt-6">
-        <div class="flex border-b border-gray-200">
+    <!-- From sm up, a row of tabs. On a phone the row would not fit, so it
+         collapses to one button naming the current tab, which opens the tabs
+         as a list. The tab buttons are the same elements either way. -->
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 mt-4 sm:mt-6">
+        <button id="tabs-toggle" data-action="toggleTabsMenu" aria-expanded="false" aria-controls="tabs-row"
+            class="sm:hidden w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium
+                   text-gray-900 bg-white border border-gray-200 rounded-md">
+            <span id="tabs-current">Dashboard</span>
+            <svg id="tabs-chevron" class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+        </button>
+        <div id="tabs-row"
+            class="hidden sm:flex flex-col sm:flex-row mt-1 sm:mt-0 py-1 sm:py-0 bg-white sm:bg-transparent
+                   border border-gray-200 sm:border-0 sm:border-b rounded-md sm:rounded-none">
             <button id="tab-dashboard" data-action="showTab" data-arg="dashboard"
-                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
+                class="tab-btn w-full sm:w-auto text-left whitespace-nowrap px-4 py-2.5 sm:py-2 text-sm font-medium
+                       border-l-2 sm:border-l-0 sm:border-b-2 sm:-mb-px transition-colors">
                 Dashboard
             </button>
             <button id="tab-logs" data-action="showTab" data-arg="logs"
-                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
+                class="tab-btn w-full sm:w-auto text-left whitespace-nowrap px-4 py-2.5 sm:py-2 text-sm font-medium
+                       border-l-2 sm:border-l-0 sm:border-b-2 sm:-mb-px transition-colors sm:ml-2">
                 Logs
             </button>
             <button id="tab-printers" data-action="showTab" data-arg="printers"
-                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
+                class="tab-btn w-full sm:w-auto text-left whitespace-nowrap px-4 py-2.5 sm:py-2 text-sm font-medium
+                       border-l-2 sm:border-l-0 sm:border-b-2 sm:-mb-px transition-colors sm:ml-2">
                 Printers
             </button>
             <button id="tab-labels" data-action="showTab" data-arg="labels"
-                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
+                class="tab-btn w-full sm:w-auto text-left whitespace-nowrap px-4 py-2.5 sm:py-2 text-sm font-medium
+                       border-l-2 sm:border-l-0 sm:border-b-2 sm:-mb-px transition-colors sm:ml-2">
                 Blank Labels
             </button>
             <button id="tab-settings" data-action="showTab" data-arg="settings"
-                class="tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ml-2">
+                class="tab-btn w-full sm:w-auto text-left whitespace-nowrap px-4 py-2.5 sm:py-2 text-sm font-medium
+                       border-l-2 sm:border-l-0 sm:border-b-2 sm:-mb-px transition-colors sm:ml-2">
                 Settings
             </button>
         </div>
     </div>
 
     <!-- ── Dashboard ─────────────────────────────────────────────────── -->
-    <div id="pane-dashboard" class="max-w-4xl mx-auto px-6 mt-6 space-y-4">
+    <div id="pane-dashboard" class="max-w-4xl mx-auto px-4 sm:px-6 mt-6 space-y-4">
 
         <div class="bg-white rounded-lg border border-gray-200 p-5">
             <div class="flex items-center space-x-3">
@@ -242,7 +262,7 @@
     </div>
 
     <!-- ── Printers ──────────────────────────────────────────────────── -->
-    <div id="pane-printers" class="hidden max-w-4xl mx-auto px-6 mt-6 pb-12 space-y-4">
+    <div id="pane-printers" class="hidden max-w-4xl mx-auto px-4 sm:px-6 mt-6 pb-12 space-y-4">
 
         <div class="bg-white rounded-lg border border-gray-200 p-5">
             <h2 class="text-sm font-semibold text-gray-900">Test a printer</h2>
@@ -272,7 +292,7 @@
     </div>
 
     <!-- ── Blank labels ──────────────────────────────────────────────── -->
-    <div id="pane-labels" class="hidden max-w-4xl mx-auto px-6 mt-6 pb-12 space-y-4">
+    <div id="pane-labels" class="hidden max-w-4xl mx-auto px-4 sm:px-6 mt-6 pb-12 space-y-4">
 
         <!-- Labels ────────────────────────────────────────────────────── -->
         <div class="bg-white rounded-lg border border-gray-200 p-4">
@@ -600,7 +620,7 @@
     </div>
 
     <!-- ── Settings ──────────────────────────────────────────────────── -->
-    <div id="pane-settings" class="hidden max-w-4xl mx-auto px-6 mt-6 pb-12 space-y-4">
+    <div id="pane-settings" class="hidden max-w-4xl mx-auto px-4 sm:px-6 mt-6 pb-12 space-y-4">
 
         <!-- Connection -->
         <div class="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
@@ -633,9 +653,9 @@
 
             <div id="save-message" class="hidden"></div>
 
-            <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+            <div class="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-gray-100">
                 <button data-action="saveSettings"
-                    class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+                    class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium whitespace-nowrap
                            px-4 py-2 rounded-md transition-colors">
                     Save &amp; Reconnect
                 </button>

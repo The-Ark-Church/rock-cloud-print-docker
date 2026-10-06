@@ -208,11 +208,28 @@ function showTab( tab ) {
         btn.classList.toggle( 'border-transparent', !active );
         btn.classList.toggle( 'text-gray-500',     !active );
         pane.classList.toggle( 'hidden', !active );
+        if ( active ) document.getElementById( 'tabs-current' ).textContent = btn.textContent.trim();
     } );
+    setTabsMenuOpen( false );
     if ( tab === 'settings' ) { loadSettings(); loadNotificationSettings(); loadSecuritySection(); }
     if ( tab === 'logs'     ) { refreshLogs(); }
     if ( tab === 'printers' ) { prefillPrinterAddress(); }
     if ( tab === 'labels'   ) { loadLabels(); loadSavedPrinters(); refreshRun(); }
+}
+
+// On a phone the tabs collapse behind one button (see the tab bar in
+// index.html). From sm up the row is always shown and none of this matters:
+// sm:flex outranks the hidden class.
+function setTabsMenuOpen( open ) {
+    const row = document.getElementById( 'tabs-row' );
+    row.classList.toggle( 'hidden', !open );
+    row.classList.toggle( 'flex', open );
+    document.getElementById( 'tabs-toggle' ).setAttribute( 'aria-expanded', open ? 'true' : 'false' );
+    document.getElementById( 'tabs-chevron' ).classList.toggle( 'rotate-180', open );
+}
+
+function toggleTabsMenu() {
+    setTabsMenuOpen( document.getElementById( 'tabs-row' ).classList.contains( 'hidden' ) );
 }
 
 // ── Status polling ────────────────────────────────────────────────
@@ -1900,6 +1917,7 @@ const clickActions = {
     toggleTheme:              () => toggleTheme(),
     restartService:           () => restartService(),
     showTab:                  el => showTab( el.dataset.arg ),
+    toggleTabsMenu:           () => toggleTabsMenu(),
     clearLogs:                () => clearLogs(),
     testPrinter:              () => testPrinter(),
     toggleLabelHelp:          () => toggleLabelHelp(),
