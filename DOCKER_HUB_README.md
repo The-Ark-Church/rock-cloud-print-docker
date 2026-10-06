@@ -116,7 +116,9 @@ volumes:
 
 ## Configuration
 
-Two ways. Environment variables take precedence over the web UI.
+Two ways. A setting saved in the web UI wins over the same environment variable, which is only used until something is saved for that setting. The PIN is the exception. When `Password` is set in the environment, the web UI won't change it.
+
+If you add `Password` after setting a PIN in the web UI, the PIN saved in the web UI still applies. Remove it there first, or delete the `Password` line from `config/appsettings.json`.
 
 **Web UI (recommended)** — Settings tab:
 
