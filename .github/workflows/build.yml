@@ -1,6 +1,6 @@
-# Validation build. Runs on every push to main and every pull request, and
-# proves the image still builds for both architectures - without publishing
-# anything. This is what catches a broken Dockerfile before it reaches a tag.
+# Validation build. Runs on every push to main and every pull request: runs
+# the unit tests, and proves the image still builds for both architectures,
+# without publishing anything. This is what catches a broken Dockerfile before it reaches a tag.
 name: build
 
 on:

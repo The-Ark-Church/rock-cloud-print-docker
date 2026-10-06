@@ -4,6 +4,8 @@ A community-maintained Docker port of the [Rock RMS](https://www.rockrms.com/) C
 
 The original application is Windows-only. This image runs as a headless Linux container with a browser-based admin UI, on any Linux server — including a Raspberry Pi or TrueNAS SCALE — on the same network as your label printers.
 
+Images are published for `linux/amd64` and `linux/arm64`. On a Raspberry Pi that means a 64-bit OS.
+
 ```
 Rock RMS Server  ──WebSocket──▶  This container  ──TCP:9100──▶  Local Printer
 ```
@@ -63,6 +65,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable rock-cloudprint
 ```
 
+> Set `WorkingDirectory` to the folder holding your `docker-compose.yml`.
+
 ---
 
 ## TrueNAS SCALE
@@ -116,7 +120,7 @@ volumes:
 
 ## Configuration
 
-Two ways. A setting saved in the web UI wins over the same environment variable, which is only used until something is saved for that setting. The PIN is the exception. When `Password` is set in the environment, the web UI won't change it.
+Two ways. A setting saved in the web UI wins over the same environment variable, which is only used until something is saved for that setting. The PIN is one exception: when `Password` is set in the environment, the web UI won't change it. The reverse-proxy settings are the other: set as environment variables, they win over anything saved, and the web UI shows them read-only.
 
 If you add `Password` after setting a PIN in the web UI, the PIN saved in the web UI still applies. Remove it there first, or delete the `Password` line from `config/appsettings.json`.
 
@@ -199,13 +203,14 @@ Settings are stored in `config/` outside the container and are unaffected by upd
 
 | Tab | Description |
 |---|---|
-| Dashboard | Connection status, uptime, labels printed counter |
+| Dashboard | Connection status, start time, time connected, labels requested, and Print Results: printed, failed, too slow, and the last failure's reason |
 | Logs | Live service log in columns — date and time, log type, source, message — with toggles for filtering by type and by source. Holds the last 2,000 entries, cleared on restart |
 | Printers | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
 | Blank Labels | Store ZPL templates and print pre-coded blank check-in labels. Works with Rock unreachable — see below |
 | Settings → Connection | Rock server URL, Proxy ID, Proxy Name |
 | Settings → Notifications | Tell Rock when a printer fails. Needs Rock-side setup first — see below |
 | Settings → Security | Set, change, or remove web UI PIN |
+| Settings → Reverse proxy | Trust `X-Forwarded-For` from your reverse proxy, so rate limits count each client separately. Off by default; leave it off for direct access |
 
 The running version is shown beside the title, next to a button that switches between the light and dark themes. The page follows your browser's own light/dark setting until you press it, then remembers what you chose.
 

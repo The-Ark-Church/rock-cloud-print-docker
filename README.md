@@ -19,6 +19,8 @@ Commonly used for check-in label printing where the printers are on a church net
 - A Rock RMS server (v17+) with a Cloud Print Proxy device record
 - The printer reachable from the server by IP on port 9100
 
+Images are published for `linux/amd64` and `linux/arm64`. On a Raspberry Pi that means a 64-bit OS.
+
 ### Install Docker on Ubuntu
 
 ```bash
@@ -178,6 +180,25 @@ environment:
 }
 ```
 
+### All settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `Url` | *(empty)* | Rock server URL |
+| `Id` | *(empty)* | The proxy device's IdKey or Guid in Rock |
+| `Name` | *(container hostname)* | The proxy's name as Rock shows it |
+| `Password` | *(empty)* | Web UI PIN. Empty means no login |
+| `SessionIdleMinutes` | `480` | A web UI login lapses after this long unused. `0` turns it off |
+| `SessionMaxHours` | `24` | A web UI login lapses after this long however much it is used. `0` turns it off |
+| `SlowPrintMilliseconds` | `5000` | A print slower than this counts as Too Slow. `0` turns the check off |
+| `NotificationsEnabled` | `false` | Report print failures to Rock |
+| `NotificationUrl` | *(empty)* | The Rock webhook to report to. Must be `https://` |
+| `NotificationSecret` | *(empty)* | Sent in the `X-CloudPrint-Token` header |
+| `NotificationCooldownMinutes` | `5` | Quiet period per printer after a report. The web UI accepts 0–1440 |
+| `TrustReverseProxy` | `false` | See [Behind a reverse proxy](#behind-a-reverse-proxy) |
+| `TrustedProxy` | *(empty)* | The reverse proxy's address, or up to 10 separated by commas |
+| `Urls` | `http://+:8080` | Where the web UI listens. The health check follows it |
+
 ### Behind a reverse proxy
 
 Off by default, and if people open the web UI directly — `http://<server-ip>:8080` — leave it off; nothing needs setting.
@@ -211,8 +232,8 @@ Always on:
 
 | Layer | What it does |
 |---|---|
-| **Rate limits** | `/api/auth/login` allows 5 attempts a minute from each client address, and 30 a minute across all of them, so a mistyped PIN elsewhere cannot lock you out and many addresses together still cannot guess quickly. Printer tests (10 a minute), notification tests (5) and starting a blank-label run (10) each have their own per-address limit. Excess returns HTTP 429 with a message and a `Retry-After` header. The address is the connection's, not `X-Forwarded-For` — unless the web UI is reached through a reverse proxy and [`TrustReverseProxy`](#behind-a-reverse-proxy) is set |
-| **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` that allows scripts, styles and images from the proxy itself only. There is no `'unsafe-inline'`: the UI's JavaScript is in `app.js` and `theme.js` rather than the page, so injected inline script or `onclick=` attributes would not run |
+| **Rate limits** | `/api/auth/login` allows 5 attempts a minute from each client address, and 30 a minute across all of them, so a mistyped PIN elsewhere cannot lock you out and many addresses together still cannot guess quickly. Printer tests (10 a minute), notification tests (5) and starting a blank-label run (10) each have their own per-address limit. Excess returns HTTP 429 with a message and a `Retry-After` header. The address is the connection's, not `X-Forwarded-For` — unless the web UI is reached through a reverse proxy and [`TrustReverseProxy`](#behind-a-reverse-proxy) is set Label previews are held to 3 a second across the whole proxy, since each one calls Labelary. |
+| **Security headers** | Every response sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and a `Content-Security-Policy` that allows scripts and styles from the proxy itself only, images from the proxy and `data:` URLs (label previews), and no plugins, `<base>` changes, outside form targets or framing. There is no `'unsafe-inline'`: the UI's JavaScript is in `app.js` and `theme.js` rather than the page, so injected inline script or `onclick=` attributes would not run |
 | **Session expiry** | A login lapses after `SessionIdleMinutes` unused (default 8 hours) and, however much it is used, after `SessionMaxHours` (default 24) |
 | **Server header suppression** | `Server: Kestrel` is disabled, so the stack is not advertised |
 | **Non-root runtime** | Runs as `appuser` (UID 1000), chosen to match the typical host volume owner so `./config` stays writable without privilege escalation |
@@ -298,11 +319,12 @@ The server returned status code '400' when status code '101' was expected.
 |---|---|
 | **Dashboard** | Connection status (green/amber/grey), start time, time connected, labels requested since start, and a Print Results panel: labels printed, labels failed, prints that finished too slowly, and the reason for the most recent failure |
 | **Logs** | Live service log in columns — date and time, log type, source and message — with toggles above for filtering by type and by source. A row must pass both filters to show |
-| **Printers** | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed |
+| **Printers** | Test whether a printer can be reached, using the same connection a print uses. Nothing is printed. The test gives up after 5 seconds; a real print has no limit, so a printer waking from sleep can fail the test and still print, late |
 | **Blank Labels** | Store ZPL templates and print pre-coded blank check-in labels. Works with Rock unreachable — see below |
 | **Settings → Connection** | Rock server URL, Proxy ID, Proxy Name — saves to `config/appsettings.json` |
-| **Settings → Failure Notifications** | Tell Rock when a printer fails. Requires Rock-side setup first — see below |
+| **Settings → Notifications** | Tell Rock when a printer fails. Requires Rock-side setup first — see below |
 | **Settings → Security** | Set, change, or remove the web UI PIN |
+| **Settings → Reverse proxy** | Whether the web UI is reached through a reverse proxy, and that proxy's address, so rate limits count each client separately — see [Behind a reverse proxy](#behind-a-reverse-proxy). Read-only when set by environment variables |
 
 The running version sits beside the title, next to a button that switches between the light and dark themes. The page follows your browser's own light/dark setting until you press it; after that it remembers your choice, kept in your browser rather than on the proxy so two administrators do not fight over it.
 
@@ -315,6 +337,8 @@ The dashboard refreshes every 2 seconds. The log panel refreshes every 3 seconds
 **Too Slow** counts prints that finished after Rock stopped waiting. Rock's check-in kiosk allows five seconds and then shows the operator its own timeout message, so anything slower finished too late for the operator to see the real result — even when the labels printed correctly a moment later. Adjust with `SlowPrintMilliseconds` (default `5000`, `0` disables the check). This happens most often on Wi-Fi printers if they have gone to sleep, but it could also be a congested campus network.
 
 When a print fails, the reason shown is the exact message the proxy returned to Rock, so it matches what appeared on the check-in screen.
+
+**A slow or asleep printer holds up only its own labels.** Prints to different printers run side by side, and labels for one printer go one at a time, in the order Rock sent them. The proxy puts no time limit on a print, so a Wi-Fi printer waking from sleep still prints, even when that takes longer than check-in waits. Such a print counts as Too Slow, and check-in will have shown a timeout. The time recorded runs from when Rock sent the request, so time spent waiting behind an earlier label for the same printer counts too.
 
 ---
 
@@ -455,7 +479,7 @@ A POST with a JSON body and an `X-CloudPrint-Token` header holding your shared s
   "occurredAt": "2026-01-01T09:15:00Z",
   "proxyName": "Kids Check-in Proxy",
   "proxyId": "da0BJR0Bpz",
-  "proxyVersion": "1.3.0",
+  "proxyVersion": "1.6.0",
   "consecutiveFailures": 3,
   "printersFailing": 5
 }
@@ -525,7 +549,7 @@ Its template checks the secret, confirms the workflow type exists, launches it, 
 
 Both commands are required. `WorkflowActivate` launches the workflow; **`RockEntity` is what makes the `{% workflowtype %}` check work** — without it the check finds nothing and every request returns 500.
 
-**A ready-made workflow is included** — see [`docs/rock/`](docs/rock/), which has an importable Rock workflow export and the configuration steps. It imports inert and notifies nobody until you set the groups.
+**A ready-made workflow is included** — see [`docs/rock/`](docs/rock/), which has an importable Rock workflow export (it needs the Workflow StimPack plugin from the Rock Shop) and the configuration steps. It imports inert and notifies nobody until you set the groups.
 
 If you build your own instead, **its attribute keys must match the parameter names above exactly** — a parameter with no matching attribute is silently discarded, leaving an empty field rather than an error.
 
@@ -602,7 +626,7 @@ Settings in `config/` live outside the container and are unaffected.
 
 ### Versions and releases
 
-Images are published by GitHub Actions whenever a version tag is pushed, so a Docker tag always corresponds to an exact commit.
+Images are published by GitHub Actions whenever a version tag is pushed, so a Docker tag always corresponds to an exact commit. The release runs the unit tests first and publishes nothing if they fail.
 
 | Docker tag | What it means |
 |---|---|
@@ -636,7 +660,7 @@ Every pull request, every push to `main`, and a weekly scheduled run are analyse
 
 ### Dependency updates
 
-Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens pull requests every Monday morning for the workflow actions, the Dockerfile's base images, the NuGet packages and the Tailwind build. Minor and patch updates come as one pull request per ecosystem. Majors that need a deliberate decision are ignored and done by hand: .NET, Node, the `Microsoft.Extensions.*` packages the net472 build relies on, Polly.Core, and Tailwind 4. For maintainers:
+Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens pull requests every Monday morning for the workflow actions, the Dockerfile's base images, the NuGet packages and the Tailwind build. Minor and patch updates come as one pull request per ecosystem, except the NuGet runtime packages, which come one per pull request (see below). Majors that need a deliberate decision are ignored and done by hand: .NET, Node, the `Microsoft.Extensions.*` and `System.Text.Json` packages the net472 build relies on, Polly.Core, and Tailwind 4. For maintainers:
 
 - **Merge only once the build and unit-test checks pass.** Together they prove the image still builds for both architectures and the tests still run. Nothing is published until a tag is pushed.
 - **Runtime packages come one per pull request.** Polly.Core (which reconnects to Rock), the `Microsoft.Extensions.*` packages and `System.Text.Json` change what runs, so each arrives on its own rather than bundled, and is worth running on a test proxy before a release. The test tools (the test SDK and xunit) are grouped into one pull request, majors included, since the unit-test check proves them.
@@ -665,6 +689,9 @@ docker compose ps
 
 # Rebuild from source after a code change
 docker compose up -d --build --force-recreate
+
+# Run the unit tests without installing .NET (uses the SDK image)
+tools/dotnet-test.sh
 
 # Rebuild just the web UI stylesheet during local development
 # (the Docker build does this automatically)
@@ -703,8 +730,10 @@ npm install && npm run css
 Run these **inside the container** — the host reaching a printer does not guarantee the container can:
 
 ```bash
-docker exec -it rock-cloudprint-rock-cloudprint-1 bash
+docker compose exec rock-cloudprint bash
 ```
+
+(Or `docker exec -it <container-name> bash`; `docker ps` shows the name.)
 
 | # | Command | What it tells you |
 |---|---|---|
@@ -733,7 +762,7 @@ Step 4 uses a `bash` feature rather than `nc`, which is not installed. The `nc -
 | EventLog / Windows Event Viewer logging | stdout / `docker compose logs` |
 | Single-file Windows executable | Multi-stage Docker image |
 
-The proxy's actual behaviour — the WebSocket connection to Rock and the raw TCP forwarding to printers — is unchanged from upstream. What changed around it is logging, metrics and address parsing, listed below.
+The WebSocket connection to Rock and the raw TCP forwarding to printers work as upstream's do, with one exception: prints no longer run on the WebSocket receive loop. Labels for one printer go one at a time, in the order Rock sent them, different printers print in parallel, and the proxy keeps answering Rock while a printer is slow. Logging, metrics and address parsing also changed, as listed below.
 
 ### Source changes
 
@@ -742,8 +771,8 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; targets .NET 10 rather than .NET 8, whose support ends in November 2026; removed Windows runtime identifier, single-file publish, and Windows-only packages |
 | `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware; added the unauthenticated `/healthz` endpoint and the `--healthcheck` probe mode |
 | `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection, `SlowPrintMilliseconds` for the slow-print threshold, and `SessionIdleMinutes` and `SessionMaxHours` for how long a login lasts, and `TrustReverseProxy` and `TrustedProxy` for counting rate limits per client behind a reverse proxy |
-| `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, each attempt is timed and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
-| `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection, and gives it its own `ILogger<ProxyClientWebSocket>` so print activity is attributed separately from worker activity; marks the proxy disconnected when it is stopped for a settings change, which upstream left reported as connected |
+| `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Prints run off the receive loop on their own task: one at a time per printer, in order, with different printers in parallel and no time limit, so an asleep printer delays only its own labels. Successful prints log at `Information` rather than `Debug`, each attempt is timed from when Rock's request arrived and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
+| `Rock.CloudPrint.Service/ProxyWorker.cs` | Passes `PrintMetrics` and the slow-print threshold to the proxy connection, and gives it its own `ILogger<ProxyClientWebSocket>` so print activity is attributed separately from worker activity; marks the proxy disconnected when it is stopped for a settings change, which upstream left reported as connected; rebuilds the connection only when `Url`, `Id` or `Name` change, so saving other settings does not drop printing; logs why a connection ended |
 | `Rock.CloudPrint.Service/PrintMetrics.cs` | New — records the outcome of each print attempt: labels printed, labels failed, prints that outran the server, and the reason for the most recent failure |
 | `Rock.CloudPrint.Service/PrinterAddress.cs` | New — printer address parsing, lifted out of the print path so the web UI's test runs the same code rather than a copy of it |
 | `Rock.CloudPrint.Service/PrinterTester.cs` | New — opens a connection to a printer and reports the result, without printing |
@@ -758,12 +787,15 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` capturing `Rock.CloudPrint.*` entries only |
 | `Rock.CloudPrint.Service/LabelStore.cs`, `ZplTemplate.cs`, `SecurityCode.cs`, `BlankLabelRunner.cs`, `BlankLabelState.cs`, `LabelCapture.cs`, `LabelPreview.cs`, `PrinterBook.cs`, `PrinterSocket.cs`, `AtomicFile.cs` | New — blank label printing: template storage, code generation and substitution, run execution, the record of used codes, capture, preview, and saved printers |
 | `Rock.CloudPrint.Service/appsettings.json` | Removed EventLog config; added `Urls: http://+:8080` and default empty keys |
-| `Rock.CloudPrint.Service/wwwroot/index.html`, `app.js`, `theme.js` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications and Security panels. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css`. The script lives in `app.js`, plus a small `theme.js` in `<head>` that applies dark mode before the first paint, and buttons are wired with `addEventListener` — no inline script or handlers, so the CSP needs no `'unsafe-inline'` |
+| `Rock.CloudPrint.Service/wwwroot/index.html`, `app.js`, `theme.js` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications, Security and Reverse proxy panels. Below 640px wide the tab row collapses to one button that opens the tabs as a list. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css`. The script lives in `app.js`, plus a small `theme.js` in `<head>` that applies dark mode before the first paint, and buttons are wired with `addEventListener` — no inline script or handlers, so the CSP needs no `'unsafe-inline'` |
 | `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Targets `net10.0` alongside `net472`; `System.Text.Json` is referenced only for `net472`, bumped from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) — .NET 10 includes its own |
 | `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
 | `Dockerfile` | New — multi-stage Linux build on the .NET 10 (Ubuntu 24.04) images, running as `appuser` on UID 1000; installs `iputils-ping` and `iproute2` for in-container diagnostics; a `HEALTHCHECK` that runs the service itself with `--healthcheck`; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html` and `app.js`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file, in the host `config/` directory mounted into the container |
+| `Rock.CloudPrint.Tests/` | New — xunit unit tests, run in CI and before every release |
+| `.github/` | New — build, release, CodeQL and weekly image-scan workflows, and Dependabot |
+| `tools/` | New — test harnesses, not shipped in the image: a fake Rock server and fake printer, `dotnet-test.sh` (runs the unit tests in the SDK image, no local .NET needed), and gate scripts such as `t5-gate.py`, which proves one asleep printer does not hold up the others |
 
 ---
 

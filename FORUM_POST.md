@@ -7,7 +7,7 @@
 
 ## Run Rock Cloud Print in a Docker Container (Linux / Raspberry Pi / NAS )
 
-Hey Rock community! 👋
+Hey Rock community! 😃
 
 If you're using Rock's Cloud Print Proxy for check-in label printing and your server is cloud-hosted, you know the challenge: the official Rock Cloud Print app is Windows-only. That's fine if you have a Windows machine on your network, but it's overkill if you just want something small, always-on, and low-maintenance.
 
@@ -37,7 +37,7 @@ The official Windows app handles this perfectly — this Docker version does the
 | EventLog | `docker compose logs` / in-app log panel |
 | Windows installer | `docker compose up --build` |
 
-The core WebSocket/TCP proxy logic is untouched — we only replaced the Windows-specific shell around it.
+The WebSocket/TCP proxy logic is upstream's, with one fix: a slow or asleep printer no longer holds up every other printer, because each printer prints on its own queue. Everything else replaced is the Windows-specific shell around it.
 
 ---
 
@@ -55,7 +55,7 @@ That's it. No .NET SDK, no Visual Studio, no Windows.
 
 **1. Install Docker** (if not already installed):
 ```bash
-sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2
 sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
 ```
@@ -65,7 +65,7 @@ sudo usermod -aG docker $USER
 docker compose up -d --build
 ```
 
-**3. Open `http://<server-ip>:8080`** and go to Settings. Enter your Rock server URL and Proxy ID (the Device IdKey from Admin Tools → Check-in → Cloud Print Proxies).
+**3. Open `http://<server-ip>:8080`** and go to Settings. Enter your Rock server URL and Proxy ID (the device's IdKey or Guid from Admin Tools → Check-in → Devices).
 
 **4. Check the Dashboard.** You should see a green "Connected" dot within a few seconds.
 
@@ -78,21 +78,23 @@ docker compose up -d --build
 **Use your origin URL, not your primary domain.**  
 If your Rock site is behind Cloudflare or another CDN, WebSocket upgrade requests are blocked at the CDN level. You'll see `400` instead of `101` in the logs. Use the direct origin URL (e.g. `https://origin.yourchurch.com` or the bare IP of your web server) to bypass the CDN.
 
-**Use the IdKey, not the GUID.**  
-When grabbing the Proxy ID from Rock, copy the short `IdKey` value (like `da0BJR0Bpz`), not the long GUID. Both technically work but the IdKey is what the proxy handshake expects.
+**The IdKey is the easy one to copy.**  
+Rock accepts either the proxy device's short `IdKey` (like `da0BJR0Bpz`) or its Guid as the Proxy ID. The IdKey is shorter and harder to mistype.
 
-**Host networking is required on Linux.**  
-The `docker-compose.yml` uses `network_mode: host` so the container can reach printers at their raw LAN IPs. This is a Linux-only Docker feature — it won't work on Docker Desktop for Mac or Windows, but that's fine since those aren't server environments anyway.
+**The default compose file uses host networking.**  
+The `docker-compose.yml` uses `network_mode: host` so the container reaches printers at their LAN addresses with nothing to map. Bridge networking with `ports: - "8080:8080"` works too; it's what the TrueNAS and Portainer examples use. Host networking isn't available on Docker Desktop for Mac or Windows.
 
 ---
 
 ### Web UI
 
-The browser UI lives at port 8080. It has three tabs:
+The browser UI lives at port 8080. It has five tabs:
 
-- **Dashboard** — connection status (green/amber/grey dot), uptime, labels printed counter
-- **Logs** — live service log stream, color-coded by level, auto-scrolling
-- **Settings** — Rock server URL, Proxy ID, Proxy Name, and an optional PIN for web UI protection
+- **Dashboard** — connection status (green/amber/grey dot), labels requested, and print results
+- **Logs** — live service log with filters by type and source
+- **Printers** — test whether a printer can be reached, without printing
+- **Blank Labels** — print pre-coded blank check-in labels, even with Rock down
+- **Settings** — Rock connection, failure notifications, an optional PIN, and a reverse proxy setting
 
 There's also a **Restart** button in the header that gracefully restarts the container (Docker's `restart: unless-stopped` policy brings it right back).
 

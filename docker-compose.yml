@@ -22,8 +22,11 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-    # Alternatively, supply settings entirely via environment variables
-    # (these override anything written via the web UI):
+    # Alternatively, supply settings as environment variables. A value saved
+    # in the web UI (config/appsettings.json) wins over the same variable, so a
+    # variable only applies until that setting is saved. The exceptions are
+    # Password, which the web UI then refuses to change, and TrustReverseProxy
+    # and TrustedProxy, which win over the file:
     # environment:
     #   - Url=https://church.rockrms.com
     #   - Id=da0BJR0Bpz
