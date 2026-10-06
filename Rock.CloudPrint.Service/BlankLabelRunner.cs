@@ -129,6 +129,12 @@ internal sealed record BlankRunStatus
 internal sealed class BlankLabelRunner
 {
     /// <summary>
+    /// The most copies one run may print. Far more than any check-in needs, and
+    /// small enough that the codes for a run fit comfortably in memory.
+    /// </summary>
+    public const int MaxQuantity = 10_000;
+
+    /// <summary>
     /// What a test copy's code is made of, repeated to whatever length the run
     /// would use.
     ///
@@ -229,7 +235,10 @@ internal sealed class BlankLabelRunner
 
         var quantity = request.IsTestCopy ? 1 : request.Quantity;
 
-        if ( quantity <= 0 )
+        // The codes for a run are worked out and held in memory before anything
+        // prints, so an unbounded number - a few extra zeros typed by mistake -
+        // could exhaust the process's memory, print path included.
+        if ( quantity <= 0 || quantity > MaxQuantity )
         {
             return (BlankRunStartOutcome.BadQuantity, null, null);
         }

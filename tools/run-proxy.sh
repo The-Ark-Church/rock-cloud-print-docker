@@ -11,7 +11,7 @@
 #
 set -euo pipefail
 
-image="${IMAGE:-asdfinit/rock-cloudprint:1.4.0}"
+image="${IMAGE:-asdfinit/rock-cloudprint:latest}"
 name="cp-test"
 rock_port=19100
 ui_port=18080

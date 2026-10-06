@@ -32,7 +32,7 @@ set -uo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-image="${IMAGE:-asdfinit/rock-cloudprint:1.4.0}"
+image="${IMAGE:-asdfinit/rock-cloudprint:latest}"
 rock_port="${ROCK_PORT:-19100}"
 printer_port="${PRINTER_PORT:-19101}"
 dead_port="${DEAD_PORT:-19199}"

@@ -69,6 +69,14 @@ internal sealed class PrinterAddress
     /// </exception>
     public static PrinterAddress Parse( string address )
     {
+        // Anything after a colon that is not a number falls back to the default
+        // port below, so without this an address could carry a line break into
+        // the log and the saved printer list, and forge log lines.
+        if ( address is not null && address.Any( char.IsControl ) )
+        {
+            throw new FormatException( "A printer address cannot contain control characters." );
+        }
+
         int printerPort = DefaultPort;
         var printerIpAddress = address;
 
@@ -86,6 +94,14 @@ internal sealed class PrinterAddress
 
         return new PrinterAddress( IPAddress.Parse( printerIpAddress ), printerPort, address );
     }
+
+    /// <summary>
+    /// The address as it is safe to write to the log: one with a control
+    /// character in it is not repeated, since a line break could forge a log
+    /// line. <see cref="Parse"/> refuses such an address anyway.
+    /// </summary>
+    public static string ForLog( string? address ) =>
+        address is not null && address.Any( char.IsControl ) ? "(an address containing control characters)" : address ?? string.Empty;
 
     /// <summary>
     /// Builds the endpoint to connect to.

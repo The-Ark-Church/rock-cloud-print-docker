@@ -79,7 +79,7 @@ internal class PrinterTester
     {
         // Logged so that a burst of tests is visible in the log panel rather
         // than being an invisible way to probe the network.
-        _logger.LogInformation( "Testing connection to {address}.", address );
+        _logger.LogInformation( "Testing connection to {address}.", PrinterAddress.ForLog( address ) );
 
         var startedAt = Stopwatch.GetTimestamp();
 

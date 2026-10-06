@@ -39,6 +39,11 @@ jobs:
 
       - run: dotnet test Rock.CloudPrint.Tests --logger "console;verbosity=normal"
 
+      # The image and the tests only build net10.0, so without this the
+      # .NET Framework build of the shared library is never compiled, and a
+      # package update that only touches it would pass unchecked.
+      - run: dotnet build Rock.CloudPrint.Shared -f net472
+
   publish:
     name: Build and publish
     needs: test

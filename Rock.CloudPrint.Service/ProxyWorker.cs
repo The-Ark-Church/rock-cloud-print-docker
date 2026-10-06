@@ -293,7 +293,9 @@ class ProxyWorker : BackgroundService
             }
 
             var uri = new Uri( baseUrl );
-            uri = new Uri( uri, $"api/v2/checkin/cloudprint/{options.Id}?name={name}" );
+            // Escaped, so a name such as "Gym & Lobby #2" reaches Rock whole rather
+            // than being cut at the & or the #.
+            uri = new Uri( uri, $"api/v2/checkin/cloudprint/{Uri.EscapeDataString( options.Id )}?name={Uri.EscapeDataString( name )}" );
 
             var ws = new ClientWebSocket();
 
