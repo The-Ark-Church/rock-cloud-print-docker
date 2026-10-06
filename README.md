@@ -587,11 +587,20 @@ Version numbers follow [semantic versioning](https://semver.org): patch for fixe
 
 A published image goes stale without any change here, as new CVEs are found in its base image. Every Monday the `image-scan` workflow scans `asdfinit/rock-cloudprint:latest` for both architectures and lists what it finds under the repository's **Security → Code scanning** tab. It only reports HIGH and CRITICAL findings that already have a fix, so an open alert means a rebuild would remove it. It never rebuilds or publishes anything itself.
 
-**What to do with an alert:** if the fix is in the base image (a Debian package or the .NET runtime), tag a patch release. The release build pulls the latest base image, and the alert closes on the next scan. If the fix is instead in one of the app's own NuGet packages, a rebuild alone will not pick it up: bump the package first. To check sooner, run the workflow by hand from the **Actions** tab.
+**What to do with an alert:** if the fix is in the base image (an Ubuntu package or the .NET runtime), tag a patch release. The release build pulls the latest base image, and the alert closes on the next scan. If the fix is instead in one of the app's own NuGet packages, a rebuild alone will not pick it up: bump the package first. To check sooner, run the workflow by hand from the **Actions** tab.
 
 ### Security scanning
 
 Every pull request, every push to `main`, and a weekly scheduled run are analysed by [CodeQL](https://codeql.github.com) for both the C# service and the web UI's JavaScript. Results are listed under the repository's **Security → Code scanning** tab, and a pull request that introduces an alert gets it as an inline annotation on the changed line. The weekly run exists because CodeQL's queries improve on their own schedule, so unchanged code can still gain new findings.
+
+### Dependency updates
+
+Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens pull requests every Monday morning for the workflow actions, the Dockerfile's base images, the NuGet packages and the Tailwind build. Minor and patch updates come as one pull request per ecosystem. Majors that need a deliberate decision are ignored and done by hand: .NET, Node, the `Microsoft.Extensions.*` packages the net472 build relies on, Polly.Core, and Tailwind 4. For maintainers:
+
+- **Merge only once the build and unit-test checks pass.** Together they prove the image still builds for both architectures and the tests still run. Nothing is published until a tag is pushed.
+- **Runtime packages come one per pull request.** Polly.Core (which reconnects to Rock), the `Microsoft.Extensions.*` packages and `System.Text.Json` change what runs, so each arrives on its own rather than bundled, and is worth running on a test proxy before a release. The test tools (the test SDK and xunit) are grouped into one pull request, majors included, since the unit-test check proves them.
+- **Merging does not update anyone's image.** The published image changes only when a tag is pushed, so an update that matters to what runs, such as a base image or a runtime package, is also the signal to cut a patch release. Updates to the actions or to Tailwind alone can wait for the next release.
+- **The base images use floating tags** such as `node:<major>-alpine`, not digests, so their security patches arrive when the image is rebuilt, not through a pull request. Cutting a patch release now and then, even with no code changes, is how those patches reach the published image.
 
 ---
 
