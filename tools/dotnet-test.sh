@@ -15,7 +15,7 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sdk_image="${SDK_IMAGE:-mcr.microsoft.com/dotnet/sdk:8.0}"
+sdk_image="${SDK_IMAGE:-mcr.microsoft.com/dotnet/sdk:10.0}"
 
 # A package cache on the host, so a second run does not re-download the world.
 # The standard location, so it is shared with anything else on this machine

@@ -574,6 +574,16 @@ Rolling back is then editing that line to the previous version and running `dock
 
 Version numbers follow [semantic versioning](https://semver.org): patch for fixes, minor for new functionality that breaks nothing, major if an upgrade requires you to change something.
 
+### Vulnerability scanning
+
+A published image goes stale without any change here, as new CVEs are found in its base image. Every Monday the `image-scan` workflow scans `asdfinit/rock-cloudprint:latest` for both architectures and lists what it finds under the repository's **Security → Code scanning** tab. It only reports HIGH and CRITICAL findings that already have a fix, so an open alert means a rebuild would remove it. It never rebuilds or publishes anything itself.
+
+**What to do with an alert:** if the fix is in the base image (a Debian package or the .NET runtime), tag a patch release. The release build pulls the latest base image, and the alert closes on the next scan. If the fix is instead in one of the app's own NuGet packages, a rebuild alone will not pick it up: bump the package first. To check sooner, run the workflow by hand from the **Actions** tab.
+
+### Security scanning
+
+Every pull request, every push to `main`, and a weekly scheduled run are analysed by [CodeQL](https://codeql.github.com) for both the C# service and the web UI's JavaScript. Results are listed under the repository's **Security → Code scanning** tab, and a pull request that introduces an alert gets it as an inline annotation on the changed line. The weekly run exists because CodeQL's queries improve on their own schedule, so unchanged code can still gain new findings.
+
 ---
 
 ## Common commands
@@ -670,7 +680,7 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 
 | File | What changed |
 |---|---|
-| `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; removed Windows runtime identifier, single-file publish, and Windows-only packages |
+| `Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj` | SDK changed from `Worker` to `Web`; targets .NET 10 rather than .NET 8, whose support ends in November 2026; removed Windows runtime identifier, single-file publish, and Windows-only packages |
 | `Rock.CloudPrint.Service/Program.cs` | Replaced Windows Service host with `WebApplication`; added REST API endpoints; removed Named Pipe and EventLog; added authentication middleware |
 | `Rock.CloudPrint.Service/CloudPrintOptions.cs` | Added `Password` for PIN protection, `SlowPrintMilliseconds` for the slow-print threshold, and `SessionIdleMinutes` and `SessionMaxHours` for how long a login lasts |
 | `Rock.CloudPrint.Service/ProxyClientWebSocket.cs` | Successful prints log at `Information` rather than `Debug`, each attempt is timed and recorded in `PrintMetrics`, and address parsing moved to `PrinterAddress` |
@@ -680,14 +690,15 @@ The proxy's actual behaviour — the WebSocket connection to Rock and the raw TC
 | `Rock.CloudPrint.Service/PrinterTester.cs` | New — opens a connection to a printer and reports the result, without printing |
 | `Rock.CloudPrint.Service/FailureNotifier.cs` | New — reports print failures to a Rock webhook, with per-printer debouncing, and remembers the last attempt so the dashboard can name the fault |
 | `Rock.CloudPrint.Service/AuthService.cs` | New — in-memory bearer token manager for web UI authentication. Tokens lapse when idle or too old, lapsed ones are pruned, and the PIN is compared in constant time |
+| `Rock.CloudPrint.Service/SettingsFile.cs` | New — saves the web UI's settings to `config/appsettings.json` one change at a time and with an atomic write, so two saves cannot undo each other and a power cut cannot leave a file the proxy fails to start with |
 | `Rock.CloudPrint.Service/InMemoryLogSink.cs` | New — circular log buffer (2,000 entries) for the Logs panel. In memory only, cleared on restart. Entries carry a sequence number so the UI fetches only what is new |
 | `Rock.CloudPrint.Service/InMemoryLoggerProvider.cs` | New — `ILoggerProvider` capturing `Rock.CloudPrint.*` entries only |
 | `Rock.CloudPrint.Service/LabelStore.cs`, `ZplTemplate.cs`, `SecurityCode.cs`, `BlankLabelRunner.cs`, `BlankLabelState.cs`, `LabelCapture.cs`, `LabelPreview.cs`, `PrinterBook.cs`, `PrinterSocket.cs`, `AtomicFile.cs` | New — blank label printing: template storage, code generation and substitution, run execution, the record of used codes, capture, preview, and saved printers |
 | `Rock.CloudPrint.Service/appsettings.json` | Removed EventLog config; added `Urls: http://+:8080` and default empty keys |
 | `Rock.CloudPrint.Service/wwwroot/index.html`, `app.js`, `theme.js` | New — single-page web UI: Dashboard, Logs, Printers, Blank Labels, and Settings with Connection, Notifications and Security panels. Tailwind is loaded from the bundled `/app.css` rather than `cdn.tailwindcss.com`, and the inline `<style>` block moved into `build/src/app.css`. The script lives in `app.js`, plus a small `theme.js` in `<head>` that applies dark mode before the first paint, and buttons are wired with `addEventListener` — no inline script or handlers, so the CSP needs no `'unsafe-inline'` |
-| `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Bumped `System.Text.Json` from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) |
+| `Rock.CloudPrint.Shared/Rock.CloudPrint.Shared.csproj` | Targets `net10.0` alongside `net472`; `System.Text.Json` is referenced only for `net472`, bumped from `8.0.4` to `8.0.5` (CVE GHSA-8g4q-xg66-9fp4) — .NET 10 includes its own |
 | `package.json`, `build/tailwind.config.js`, `build/src/app.css` | New — Tailwind build tooling. `npm run css` compiles the stylesheet |
-| `Dockerfile` | New — multi-stage Linux build; installs `iputils-ping` and `iproute2` for in-container diagnostics; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html` and `app.js`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
+| `Dockerfile` | New — multi-stage Linux build on the .NET 10 (Ubuntu 24.04) images, running as `appuser` on UID 1000; installs `iputils-ping` and `iproute2` for in-container diagnostics; pre-creates `/app/config`; a Node stage compiles the stylesheet so it cannot drift from `index.html` and `app.js`; takes a `VERSION` build argument so the version the UI reports comes from the release tag |
 | `docker-compose.yml` | New — host networking, `./config:/app/config` mount, `Password` env var option |
 | `config/appsettings.json` | New — persistent settings file, in the host `config/` directory mounted into the container |
 

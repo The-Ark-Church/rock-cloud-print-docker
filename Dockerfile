@@ -15,7 +15,7 @@
 # of sync with the classes used in index.html and app.js. Both are copied in:
 # app.js builds much of the page as HTML strings, and a class Tailwind cannot
 # see is purged from the stylesheet.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS css
+FROM --platform=$BUILDPLATFORM node:24-alpine AS css
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -23,7 +23,7 @@ COPY build/ build/
 COPY Rock.CloudPrint.Service/wwwroot/index.html Rock.CloudPrint.Service/wwwroot/app.js Rock.CloudPrint.Service/wwwroot/
 RUN npm run css
 
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy project files first so dotnet restore is cached independently of source changes.
@@ -56,7 +56,7 @@ RUN dotnet publish Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj \
     -o /app/publish
 
 # ── Runtime image ────────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
@@ -78,8 +78,16 @@ RUN mkdir -p /app/config
 
 # Run as a non-root user (UID 1000 matches the host volume owner so the
 # config directory bind-mount remains writable without privilege escalation).
-RUN adduser --disabled-password --no-create-home --gecos '' --uid 1000 appuser \
- && chown -R appuser /app
+#
+# The .NET 10 images are built on Ubuntu 24.04, which already ships a user and
+# group called "ubuntu" on UID/GID 1000. That account is removed first so the
+# proxy keeps running as appuser on 1000, as it did on the older Debian images,
+# and an existing config directory stays owned by the right user.
+RUN if getent passwd 1000 > /dev/null; then userdel --remove "$(getent passwd 1000 | cut -d: -f1)" 2> /dev/null || true; fi \
+ && if getent group 1000 > /dev/null; then groupdel "$(getent group 1000 | cut -d: -f1)"; fi \
+ && groupadd --gid 1000 appuser \
+ && useradd --no-log-init --no-create-home --uid 1000 --gid 1000 --shell /usr/sbin/nologin appuser \
+ && chown -R appuser:appuser /app
 USER appuser
 
 # Port the web UI listens on (also set in appsettings.json "Urls").
