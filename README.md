@@ -564,6 +564,10 @@ A published image goes stale without any change here, as new CVEs are found in i
 
 **What to do with an alert:** if the fix is in the base image (a Debian package or the .NET runtime), tag a patch release. The release build pulls the latest base image, and the alert closes on the next scan. If the fix is instead in one of the app's own NuGet packages, a rebuild alone will not pick it up: bump the package first. To check sooner, run the workflow by hand from the **Actions** tab.
 
+### Security scanning
+
+Every pull request, every push to `main`, and a weekly scheduled run are analysed by [CodeQL](https://codeql.github.com) for both the C# service and the web UI's JavaScript. Results are listed under the repository's **Security → Code scanning** tab, and a pull request that introduces an alert gets it as an inline annotation on the changed line. The weekly run exists because CodeQL's queries improve on their own schedule, so unchanged code can still gain new findings.
+
 ---
 
 ## Common commands
