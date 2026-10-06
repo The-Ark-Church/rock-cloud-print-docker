@@ -72,7 +72,7 @@ internal sealed class PrinterAddress
         // Anything after a colon that is not a number falls back to the default
         // port below, so without this an address could carry a line break into
         // the log and the saved printer list, and forge log lines.
-        if ( address is not null && address.Any( char.IsControl ) )
+        if ( address.Any( char.IsControl ) )
         {
             throw new FormatException( "A printer address cannot contain control characters." );
         }

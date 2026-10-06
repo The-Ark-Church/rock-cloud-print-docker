@@ -18,9 +18,11 @@ on:
     tags:
       - 'v*.*.*'
 
-# Least privilege: the job only needs to create the Release.
+# Least privilege: read-only unless a job says otherwise. Only publish writes,
+# to create the GitHub release; the test job runs restored NuGet packages and
+# has no business holding a token that can write to the repository.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # A tag is not proof the tests passed on that commit - it can be pushed on
@@ -36,6 +38,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - run: dotnet test Rock.CloudPrint.Tests --logger "console;verbosity=normal"
 
@@ -48,6 +52,8 @@ jobs:
     name: Build and publish
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

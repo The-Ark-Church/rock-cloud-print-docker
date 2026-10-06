@@ -57,13 +57,10 @@ RUN dotnet publish Rock.CloudPrint.Service/Rock.CloudPrint.Service.csproj \
 
 # ── Runtime image ────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
-
-# Without this a locally built image reports the Ubuntu base image's version
-# label. The release workflow overrides it with the tag's version.
-ARG VERSION=0.0.0-dev
-LABEL org.opencontainers.image.version=$VERSION
 WORKDIR /app
-COPY --from=build /app/publish .
+
+# Everything that does not change between releases comes before the app is
+# copied in, so these layers stay cached and an upgrade pulls only the app.
 
 # Basic network diagnostics, so someone with a shell on this container can work
 # out why a printer is unreachable without installing anything at the time -
@@ -92,7 +89,18 @@ RUN if getent passwd 1000 > /dev/null; then userdel --remove "$(getent passwd 10
  && if getent group 1000 > /dev/null; then groupdel "$(getent group 1000 | cut -d: -f1)"; fi \
  && groupadd --gid 1000 appuser \
  && useradd --no-log-init --no-create-home --uid 1000 --gid 1000 --shell /usr/sbin/nologin appuser \
- && chown -R appuser:appuser /app
+ && chown appuser:appuser /app /app/config
+# Copied in already owned by appuser, rather than copied and then chowned,
+# which would store every file twice.
+COPY --from=build --chown=appuser:appuser /app/publish .
+
+# Without this a locally built image reports the Ubuntu base image's version
+# label. The release workflow overrides it with the tag's version. Declared
+# after the RUN steps on purpose: a build argument whose value changes makes
+# every later RUN rebuild, which would defeat the caching above.
+ARG VERSION=0.0.0-dev
+LABEL org.opencontainers.image.version=$VERSION
+
 USER appuser
 
 # Port the web UI listens on (also set in appsettings.json "Urls").
