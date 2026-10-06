@@ -65,8 +65,12 @@ def check(name, ok, detail=""):
 
 def api(method, path, body=None):
     data = json.dumps(body).encode() if body is not None else None
+    # The proxy refuses a POST or DELETE to /api without X-CloudPrint-Request
+    # (it is how it tells the web UI from another site's page). Sent on every
+    # call, like the web UI does, so nothing here has to decide which need it.
     request = urllib.request.Request(BASE + path, data=data, method=method,
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json",
+                                              "X-CloudPrint-Request": "1"})
     try:
         with urllib.request.urlopen(request) as response:
             return response.status, json.loads(response.read() or b"null")
