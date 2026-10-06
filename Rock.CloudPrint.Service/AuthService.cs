@@ -189,14 +189,18 @@ internal class AuthService
     /// </summary>
     private static bool IsExpired( Session session, DateTimeOffset now, CloudPrintOptions options )
     {
+        // Compared as numbers rather than by building a TimeSpan from the
+        // setting. TimeSpan.FromHours throws past about 256 million hours, so
+        // somebody writing a huge number to mean "never" - instead of zero -
+        // would otherwise turn every signed-in request into a 500.
         if ( options.SessionIdleMinutes > 0 &&
-             now - session.LastUsedAt >= TimeSpan.FromMinutes( options.SessionIdleMinutes ) )
+             ( now - session.LastUsedAt ).TotalMinutes >= options.SessionIdleMinutes )
         {
             return true;
         }
 
         if ( options.SessionMaxHours > 0 &&
-             now - session.IssuedAt >= TimeSpan.FromHours( options.SessionMaxHours ) )
+             ( now - session.IssuedAt ).TotalHours >= options.SessionMaxHours )
         {
             return true;
         }

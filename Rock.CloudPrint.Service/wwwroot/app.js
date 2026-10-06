@@ -78,12 +78,34 @@ async function doLogin() {
 
         if ( !appInitialized ) {
             initApp();
+        } else {
+            resumeAfterLogin();
         }
-        // If already initialized, the running intervals resume automatically.
     } catch ( err ) {
         errEl.textContent = 'Error: ' + escHtml( err.message );
         errEl.classList.remove( 'hidden' );
     }
+}
+
+// The status and log polls run on intervals that never stop, so they pick
+// up again on their own once there is a valid token. The blank-label run and
+// capture polls are different: the 401 that ended the session stopped them.
+// Without this, a run that kept printing on the server while somebody logged
+// back in would leave its progress card frozen until they changed tabs.
+function resumeAfterLogin() {
+    if ( document.getElementById( 'pane-labels' ).classList.contains( 'hidden' ) ) return;
+    refreshRun();
+    resumeCapture();
+}
+
+async function resumeCapture() {
+    try {
+        const resp = await authFetch( '/api/labels/capture' );
+        if ( !resp.ok ) return;
+        const data = await resp.json();
+        renderCapture( data );
+        if ( data.state === 'waiting' ) startCapturePolling();
+    } catch ( e ) { /* the 401 handler has already said why */ }
 }
 
 async function doLogout() {

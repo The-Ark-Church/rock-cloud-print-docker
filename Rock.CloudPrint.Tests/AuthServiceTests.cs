@@ -123,6 +123,22 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public void AHugeLimitMeansAlmostNeverRatherThanAnError()
+    {
+        // int.MaxValue hours is far past what a TimeSpan can hold. Somebody
+        // writing it to mean "never" must get exactly that, not an exception
+        // on every signed-in request.
+        _options.CurrentValue.SessionIdleMinutes = int.MaxValue;
+        _options.CurrentValue.SessionMaxHours = int.MaxValue;
+        var token = _auth.IssueToken( _options );
+
+        _clock.Advance( TimeSpan.FromDays( 365 ) );
+
+        Assert.True( _auth.ValidateToken( token, _options ) );
+        Assert.NotNull( _auth.IssueToken( _options ) );
+    }
+
+    [Fact]
     public void ShorteningTheLimitAppliesToSessionsAlreadyOpen()
     {
         _options.CurrentValue.SessionIdleMinutes = 480;
