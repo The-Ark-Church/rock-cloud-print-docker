@@ -68,7 +68,9 @@ untouchable=(
 # print activity is attributed separately from worker activity in the log view.
 # v1.6.0-rc1 moved it: printing came off the receive loop (ProxyClientWebSocket,
 # FailureNotifier) and the health check arrived (ProxyWorker, ProxyStatus).
-baseline="${BASELINE:-v1.6.0-rc1}"
+# v1.6.0 moved it to the release: rc2 and rc3 fixed what reviews of rc1 found
+# (ProxyClientWebSocket, ProxyWorker).
+baseline="${BASELINE:-v1.6.0}"
 failed=0
 
 echo "Searching the blank label files for anything that would tie them to the print path."
