@@ -271,6 +271,17 @@ function fmtDate( iso ) {
     } );
 }
 
+// "4m ago" rather than a date, because the question being asked is
+// whether this proxy is the one Rock is printing through right now.
+function fmtAgo( iso ) {
+    if ( !iso ) return 'Never';
+    const seconds = Math.max( 0, Math.round( ( Date.now() - new Date( iso ) ) / 1000 ) );
+    if ( seconds < 60 )    return 'Just now';
+    if ( seconds < 3600 )  return Math.floor( seconds / 60 ) + 'm ago';
+    if ( seconds < 86400 ) return Math.floor( seconds / 3600 ) + 'h ago';
+    return fmtDate( iso );
+}
+
 async function refreshStatus() {
     try {
         const resp = await authFetch( '/api/status' );
@@ -285,6 +296,7 @@ async function refreshStatus() {
         const text   = document.getElementById( 'status-text' );
         const banner = document.getElementById( 'not-configured-banner' );
         const stats  = document.getElementById( 'stats-grid' );
+        const hint   = document.getElementById( 'standby-hint' );
 
         if ( d.isConnected ) {
             dot.className    = 'w-3 h-3 rounded-full bg-green-500 flex-shrink-0';
@@ -295,18 +307,27 @@ async function refreshStatus() {
             document.getElementById( 'started-time'    ).textContent = fmtDate( d.startedDateTime );
             document.getElementById( 'connected-since' ).textContent = fmtDate( d.connectedDateTime );
             document.getElementById( 'labels-count'    ).textContent = (d.totalLabelsPrinted || 0).toLocaleString();
+
+            const thisConnection = d.labelsThisConnection || 0;
+            document.getElementById( 'last-print' ).textContent = fmtAgo( d.lastPrintDateTime );
+            document.getElementById( 'last-print-detail' ).textContent = thisConnection === 0
+                ? 'None this connection'
+                : thisConnection.toLocaleString() + ( thisConnection === 1 ? ' label' : ' labels' ) + ' this connection';
+            hint.classList.toggle( 'hidden', thisConnection > 0 );
         } else if ( !d.isConfigured ) {
             dot.className    = 'w-3 h-3 rounded-full bg-gray-300 flex-shrink-0';
             text.textContent = 'Not configured';
             text.className   = 'text-base font-medium text-gray-500';
             stats.classList.add( 'hidden' );
             banner.classList.remove( 'hidden' );
+            hint.classList.add( 'hidden' );
         } else {
             dot.className    = 'w-3 h-3 rounded-full bg-yellow-400 flex-shrink-0 pulse';
             text.textContent = 'Connecting to Rock server…';
             text.className   = 'text-base font-medium text-yellow-700';
             stats.classList.add( 'hidden' );
             banner.classList.add( 'hidden' );
+            hint.classList.add( 'hidden' );
         }
     } catch ( _ ) {}
 }
