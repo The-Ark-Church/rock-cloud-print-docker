@@ -459,6 +459,8 @@ public class Program
                 startedDateTime = status.StartedDateTime,
                 connectedDateTime = status.ConnectedDateTime,
                 totalLabelsPrinted = status.TotalPrinted,
+                labelsThisConnection = status.LabelsThisConnection,
+                lastPrintDateTime = status.LastPrintDateTime,
                 labelsPrinted = metrics.SuccessfulLabels,
                 labelsFailed = metrics.FailedLabels,
                 slowPrints = metrics.SlowPrints,

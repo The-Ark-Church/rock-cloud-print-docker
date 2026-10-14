@@ -41,26 +41,44 @@ class ProxyStatus
 
     public int TotalPrinted { get; private set; }
 
+    /// <summary>
+    /// Labels Rock has sent over the current connection. Rock sends every print
+    /// for a Proxy ID to the proxy that connected first, so a proxy that has
+    /// been connected a while and has this at zero is most likely standing by
+    /// behind another one. The proxy is never told that directly - this is the
+    /// closest it can get.
+    /// </summary>
+    public int LabelsThisConnection { get; private set; }
+
+    /// <summary>
+    /// When Rock last sent a print, over this connection or an earlier one.
+    /// </summary>
+    public DateTimeOffset? LastPrintDateTime { get; private set; }
+
     public void SetConnected( bool connected )
     {
-        // Reporting a disconnect twice must not restart the grace period, or a
-        // proxy that keeps being told it is down would never be reported so.
-        if ( !connected && !IsConnected && DisconnectedDateTime.HasValue )
+        lock ( _lock )
         {
-            return;
-        }
+            // Reporting a disconnect twice must not restart the grace period, or a
+            // proxy that keeps being told it is down would never be reported so.
+            if ( !connected && !IsConnected && DisconnectedDateTime.HasValue )
+            {
+                return;
+            }
 
-        IsConnected = connected;
+            IsConnected = connected;
+            LabelsThisConnection = 0;
 
-        if ( connected )
-        {
-            ConnectedDateTime = DateTimeOffset.Now;
-            DisconnectedDateTime = null;
-        }
-        else
-        {
-            ConnectedDateTime = null;
-            DisconnectedDateTime = DateTimeOffset.Now;
+            if ( connected )
+            {
+                ConnectedDateTime = DateTimeOffset.Now;
+                DisconnectedDateTime = null;
+            }
+            else
+            {
+                ConnectedDateTime = null;
+                DisconnectedDateTime = DateTimeOffset.Now;
+            }
         }
     }
 
@@ -69,6 +87,8 @@ class ProxyStatus
         lock ( _lock )
         {
             TotalPrinted += count;
+            LabelsThisConnection += count;
+            LastPrintDateTime = DateTimeOffset.Now;
         }
     }
 }
